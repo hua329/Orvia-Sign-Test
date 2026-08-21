@@ -19,9 +19,21 @@ jobs:
           echo "$P12_BASE64" | base64 -d > cert.p12
           echo "$PROFILE_BASE64" | base64 -d > profile.mobileprovision
 
-      - name: Install zsign
+      - name: Install build tools
         run: |
-          wget https://github.com/zhlynn/zsign/releases/latest/download/zsign -O zsign
+          sudo apt-get update
+          sudo apt-get install -y cmake build-essential git
+
+      - name: Build zsign
+        run: |
+          git clone --depth 1 https://github.com/zhlynn/zsign.git
+          cd zsign
+          mkdir build
+          cd build
+          cmake ..
+          make -j2
+          cp zsign ../../zsign
+          cd ../..
           chmod +x zsign
 
       - name: Sign IPA
