@@ -30,6 +30,7 @@ jobs:
           cd zsign/build/linux
           make clean && make
           cp ../../bin/zsign ../../../zsign
+          ls -la ../../../zsign
           cd ../../..
           chmod +x zsign
 
