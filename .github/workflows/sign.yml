@@ -2,6 +2,19 @@ name: Sign Orvia IPA
 
 on:
   workflow_dispatch:
+    inputs:
+      p12_base64:
+        description: 'P12 certificate base64'
+        required: true
+        type: string
+      profile_base64:
+        description: 'Mobileprovision base64'
+        required: true
+        type: string
+      p12_password:
+        description: 'P12 password'
+        required: true
+        type: string
 
 jobs:
   sign:
@@ -13,8 +26,8 @@ jobs:
 
       - name: Prepare signing files
         env:
-          P12_BASE64: ${{ secrets.P12_BASE64 }}
-          PROFILE_BASE64: ${{ secrets.PROFILE_BASE64 }}
+          P12_BASE64: ${{ inputs.p12_base64 }}
+          PROFILE_BASE64: ${{ inputs.profile_base64 }}
         run: |
           echo "$P12_BASE64" | base64 -d > cert.p12
           echo "$PROFILE_BASE64" | base64 -d > profile.mobileprovision
@@ -35,7 +48,7 @@ jobs:
 
       - name: Sign IPA
         env:
-          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          P12_PASSWORD: ${{ inputs.p12_password }}
         run: |
           ./zsign-bin \
             -k cert.p12 \
