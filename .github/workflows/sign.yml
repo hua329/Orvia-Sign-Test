@@ -28,6 +28,7 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/zhlynn/zsign.git
           cd zsign
+          rm -rf build
           mkdir build
           cd build
           cmake ..
