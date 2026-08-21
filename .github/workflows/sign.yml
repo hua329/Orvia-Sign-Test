@@ -26,19 +26,18 @@ jobs:
 
       - name: Build zsign
         run: |
-          git clone --depth 1 https://github.com/zhlynn/zsign.git
-          cd zsign/build/linux
+          git clone --depth 1 https://github.com/zhlynn/zsign.git zsign-src
+          cd zsign-src/build/linux
           make clean && make
-          cp ../../bin/zsign ../../../zsign
-          ls -la ../../../zsign
+          cp ../../bin/zsign ../../../zsign-bin
           cd ../../..
-          chmod +x zsign
+          chmod +x zsign-bin
 
       - name: Sign IPA
         env:
           P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
         run: |
-          ./zsign \
+          ./zsign-bin \
             -k cert.p12 \
             -p "$P12_PASSWORD" \
             -m profile.mobileprovision \
