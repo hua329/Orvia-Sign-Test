@@ -1,0 +1,33 @@
+name: Sign Orvia IPA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sign:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install zsign
+        run: |
+          wget https://github.com/zhlynn/zsign/releases/latest/download/zsign -O zsign
+          chmod +x zsign
+
+      - name: Sign IPA
+        run: |
+          ./zsign \
+            -k cert.p12 \
+            -p "$(cat password.txt)" \
+            -m profile.mobileprovision \
+            -o Orvia-signed.ipa \
+            Orvia.ipa
+
+      - name: Upload signed IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Orvia-signed
+          path: Orvia-signed.ipa
+          retention-days: 1
