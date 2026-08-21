@@ -29,7 +29,7 @@ jobs:
           git clone --depth 1 https://github.com/zhlynn/zsign.git
           cd zsign/build/linux
           make clean && make
-          cp zsign ../../../zsign
+          cp ../../bin/zsign ../../../zsign
           cd ../../..
           chmod +x zsign
 
