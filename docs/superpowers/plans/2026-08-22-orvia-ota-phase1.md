@@ -4,9 +4,9 @@
 
 **Goal:** Add a local-only, repeatable publisher that reads a signed IPA, generates an OTA manifest for `com.ice.orvia`, and prepares isolated R2 upload commands without changing the existing Zsign workflow.
 
-**Architecture:** Keep the repository as a static IPA plus existing workflow. Add one standard-library Python module with pure metadata/manifest/planning functions and a CLI wrapper around Wrangler R2 object uploads. Use one UUID task path per publish and reject unsafe public domains before any upload command is run.
+**Architecture:** Keep the repository as a static IPA plus existing workflow. Add one standard-library Python module with pure metadata/manifest/planning functions and a CLI wrapper around pinned `wrangler@4.125.0` R2 object uploads. Use one UUID task path per publish and reject unsafe public domains before any upload command is run.
 
-**Tech Stack:** Python 3 standard library (`zipfile`, `plistlib`, `urllib.parse`, `subprocess`, `unittest`), Wrangler CLI for R2 object uploads, Apple XML plist.
+**Tech Stack:** Python 3 standard library (`zipfile`, `plistlib`, `urllib.parse`, `subprocess`, `unittest`), pinned `wrangler@4.125.0` CLI for remote R2 object uploads, Apple XML plist.
 
 ## Global Constraints
 
@@ -21,7 +21,7 @@
 ## File Map
 
 - Create: `tools/__init__.py` — make the tools directory importable by the test runner.
-- Create: `tools/publish_ota.py` — IPA inspection, manifest serialization, safe publish planning, Wrangler command construction, and CLI.
+- Create: `tools/publish_ota.py` — IPA inspection, manifest serialization, safe publish planning, `wrangler@4.125.0` command construction, and CLI.
 - Create: `tests/__init__.py` — make the test package importable on Windows and in `unittest` discovery.
 - Create: `tests/test_publish_ota.py` — generated IPA fixtures and behavior tests for metadata, manifest, URL safety, task isolation, and dry-run planning.
 - Create: `docs/operations/orvia-ota-phase1-runbook.md` — preflight, non-destructive dry-run, R2 upload procedure, HTTP checks, and iPhone Safari acceptance steps.
@@ -337,7 +337,7 @@ git add tests/test_publish_ota.py
 git -c user.name="Codex" -c user.email="codex@local" commit -m "test: define OTA dry-run and upload command contract"
 ```
 
-### Task 6: Implement Wrangler upload planning and CLI dry-run
+### Task 6: Implement pinned `wrangler@4.125.0` upload planning and CLI dry-run
 
 **Files:**
 - Modify: `tools/publish_ota.py`
@@ -353,15 +353,15 @@ git -c user.name="Codex" -c user.email="codex@local" commit -m "test: define OTA
 Return exactly these two command shapes, using argument lists rather than shell interpolation:
 
 ```text
-npx wrangler@4 r2 object put {bucket}/{ipa_key} --remote --file={ipa_path} --content-type=application/octet-stream
-npx wrangler@4 r2 object put {bucket}/{manifest_key} --remote --file={manifest_path} --content-type=application/xml
+npx wrangler@4.125.0 r2 object put {bucket}/{ipa_key} --remote --file={ipa_path} --content-type=application/octet-stream
+npx wrangler@4.125.0 r2 object put {bucket}/{manifest_key} --remote --file={manifest_path} --content-type=application/xml
 ```
 
-Use the `wrangler@4` package argument and `--remote` for both R2 object uploads because Wrangler v4 defaults commands that support local/remote storage to local. Use `str(Path)` for file arguments. No secret or user-provided command fragment may be passed through a shell.
+Use the exact `wrangler@4.125.0` package argument and `--remote` for both remote R2 object uploads because Wrangler v4 defaults commands that support local/remote storage to local. Use `str(Path)` for file arguments. No secret or user-provided command fragment may be passed through a shell.
 
 - [ ] **Step 2: Implement CLI argument parsing and temporary manifest cleanup**
 
-Require `--ipa`, `--bucket`, and `--base-url`; accept optional `--task-id` and `--dry-run`. Inspect the IPA, plan the publish, serialize the manifest into a `TemporaryDirectory`, and print JSON to stdout. In dry-run mode, print the JSON without calling `subprocess.run`. In upload mode, run the two commands with `check=True`, capture output, convert command failures into `PublishError("R2 上传失败，请检查 Wrangler 登录、bucket 和权限")`, and let the temporary directory clean itself up.
+Require `--ipa`, `--bucket`, and `--base-url`; accept optional `--task-id` and `--dry-run`. Inspect the IPA, plan the publish, serialize the manifest into a `TemporaryDirectory`, and print JSON to stdout. In dry-run mode, print the JSON without calling `subprocess.run`. In upload mode, run the two `wrangler@4.125.0` commands with `check=True`, capture output, convert command failures into `PublishError("R2 上传失败，请检查 wrangler@4.125.0 登录、bucket 和权限")`, and let the temporary directory clean itself up.
 
 - [ ] **Step 3: Run focused tests to verify they pass**
 
@@ -371,7 +371,7 @@ Run:
 python -m unittest tests.test_publish_ota -v
 ```
 
-Expected: all tests PASS, including the subprocess-based dry-run test; no Wrangler process is started because the CLI receives `--dry-run`.
+Expected: all tests PASS, including the subprocess-based dry-run test; no `wrangler@4.125.0` process is started because the CLI receives `--dry-run`.
 
 - [ ] **Step 4: Run a manual dry-run against the repository IPA**
 
@@ -453,7 +453,7 @@ Run:
 python -m unittest discover -s tests -v
 ```
 
-Expected: all tests PASS with no test invoking Wrangler or making network requests.
+Expected: all tests PASS with no test invoking `wrangler@4.125.0` or making network requests.
 
 - [ ] **Step 2: Run type/syntax checks available in the repository**
 

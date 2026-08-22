@@ -56,8 +56,9 @@ human approval, and after recording the dry-run `taskId`, run the command withou
 python tools/publish_ota.py --ipa Orvia-signed.ipa --bucket orvia-install --base-url https://orvia-install.ice329.me --task-id <taskId-from-dry-run>
 ```
 
-The approved upload path invokes the two argument-list commands with the pinned
-`wrangler@4` package and `--remote` on each `r2 object put`. Wrangler v4 defaults
+The approved upload path invokes the two argument-list commands with the exact
+pinned `wrangler@4.125.0` package and `--remote` on each remote `r2 object put`.
+Wrangler v4 defaults
 commands that can use local or remote storage to local, so `--remote` is required
 to target the account's R2 bucket. Do not remove `--remote` or substitute an
 unpinned Wrangler package for an approved upload.

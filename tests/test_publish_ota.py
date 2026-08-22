@@ -119,8 +119,8 @@ class PublishOtaTests(unittest.TestCase):
         self.assertIn("orvia-install/" + plan.ipa_key, " ".join(commands[0]))
         self.assertIn("--file=signed.ipa", commands[0])
         self.assertIn("--file=manifest.plist", commands[1])
-        self.assertEqual(commands[0][1], "wrangler@4")
-        self.assertEqual(commands[1][1], "wrangler@4")
+        self.assertEqual(commands[0][1], "wrangler@4.125.0")
+        self.assertEqual(commands[1][1], "wrangler@4.125.0")
         self.assertIn("--remote", commands[0])
         self.assertIn("--remote", commands[1])
         self.assertIn("--content-type=application/octet-stream", commands[0])
@@ -211,6 +211,35 @@ class PublishOtaTests(unittest.TestCase):
                     ])
                 except OSError as exc:
                     self.fail(f"manifest write error escaped: {exc}")
+
+        self.assertEqual(result, 1)
+        self.assertIn("manifest", stderr.getvalue().lower())
+        run.assert_not_called()
+
+    def test_cli_manifest_tempdir_failure_returns_publish_error_without_upload(self):
+        from tools.publish_ota import main
+
+        fixture = make_ipa(self.tempdir, {
+            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleVersion": "42",
+            "CFBundleShortVersionString": "1.4.2",
+        })
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with patch(
+            "tools.publish_ota.tempfile.TemporaryDirectory",
+            side_effect=OSError("no temp space"),
+        ), patch("tools.publish_ota.subprocess.run") as run:
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                try:
+                    result = main([
+                        "--ipa", str(fixture),
+                        "--bucket", "orvia-install",
+                        "--base-url", "https://orvia-install.ice329.me",
+                        "--task-id", FIXED_TASK_ID,
+                    ])
+                except OSError as exc:
+                    self.fail(f"manifest temp-directory error escaped: {exc}")
 
         self.assertEqual(result, 1)
         self.assertIn("manifest", stderr.getvalue().lower())

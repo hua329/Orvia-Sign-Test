@@ -274,7 +274,7 @@ def build_upload_commands(
     return [
         [
             executable,
-            "wrangler@4",
+            "wrangler@4.125.0",
             "r2",
             "object",
             "put",
@@ -285,7 +285,7 @@ def build_upload_commands(
         ],
         [
             executable,
-            "wrangler@4",
+            "wrangler@4.125.0",
             "r2",
             "object",
             "put",
@@ -326,8 +326,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         metadata = inspect_ipa(ipa_path)
         plan = plan_publish(metadata, args.bucket, args.base_url, args.task_id)
 
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            manifest_path = Path(temporary_directory) / "manifest.plist"
+        try:
+            temporary_directory = tempfile.TemporaryDirectory()
+        except OSError as exc:
+            raise PublishError("无法创建 OTA manifest 临时目录") from exc
+
+        with temporary_directory as temporary_directory_path:
+            manifest_path = Path(temporary_directory_path) / "manifest.plist"
             try:
                 manifest_path.write_bytes(build_manifest(metadata, plan.ipa_url))
             except OSError as exc:
