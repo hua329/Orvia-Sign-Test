@@ -1,5 +1,22 @@
 const TASK_PATH = new RegExp("^/sign/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/(Orvia[.]ipa|manifest[.]plist)$");
 const CONTENT_TYPES = { "Orvia.ipa": "application/octet-stream", "manifest.plist": "application/xml" };
+const DOT_SEGMENT = /^(?:[.]|%2e){1,2}$/i;
+
+function hasRawDotSegment(rawUrl) {
+  const schemeEnd = rawUrl.indexOf("://");
+  const pathStart = rawUrl.indexOf("/", schemeEnd + 3);
+  if (pathStart === -1) return false;
+
+  const queryStart = rawUrl.indexOf("?", pathStart);
+  const fragmentStart = rawUrl.indexOf("#", pathStart);
+  const pathEnd = queryStart === -1
+    ? fragmentStart
+    : fragmentStart === -1
+      ? queryStart
+      : Math.min(queryStart, fragmentStart);
+  const rawPath = rawUrl.slice(pathStart, pathEnd === -1 ? rawUrl.length : pathEnd);
+  return rawPath.split("/").some((segment) => DOT_SEGMENT.test(segment));
+}
 
 export function resolveObjectPath(pathname) {
   const match = TASK_PATH.exec(pathname);
@@ -41,6 +58,8 @@ const worker = {
     if (request.method !== "GET" && request.method !== "HEAD") {
       return methodNotAllowed();
     }
+
+    if (hasRawDotSegment(request.url)) return notFound();
 
     const url = new URL(request.url);
     if (url.search) return notFound();

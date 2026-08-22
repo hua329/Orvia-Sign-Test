@@ -63,6 +63,13 @@ function request(pathname, init = {}) {
   return new Request(`https://beta.ice329.me${pathname}`, init);
 }
 
+function rawRequest(pathname, init = {}) {
+  return {
+    method: init.method ?? "GET",
+    url: `https://beta.ice329.me${pathname}`,
+  };
+}
+
 function env(store) {
   return { OTA_BUCKET: store };
 }
@@ -133,6 +140,24 @@ for (const [description, pathname] of invalidPaths) {
   test(`rejects ${description}`, async () => {
     const store = bucket();
     const response = await worker.fetch(request(pathname), env(store));
+    assert.equal(response.status, 404);
+    assert.deepEqual(store.getKeys, []);
+    assert.deepEqual(store.headKeys, []);
+  });
+}
+
+const dotAliasPaths = [
+  ["literal dot segments", `/sign/${TASK_ID}/./Orvia.ipa`],
+  ["literal dot-dot segments", `/sign/${TASK_ID}/x/../Orvia.ipa`],
+  ["percent-encoded dot segments", `/sign/${TASK_ID}/%2e/Orvia.ipa`],
+  ["uppercase percent-encoded dot segments", `/sign/${TASK_ID}/%2E/Orvia.ipa`],
+  ["mixed-case percent-encoded dot-dot segments", `/sign/${TASK_ID}/%2e%2E/Orvia.ipa`],
+];
+
+for (const [description, pathname] of dotAliasPaths) {
+  test(`rejects ${description} before URL normalization without touching R2`, async () => {
+    const store = bucket();
+    const response = await worker.fetch(rawRequest(pathname), env(store));
     assert.equal(response.status, 404);
     assert.deepEqual(store.getKeys, []);
     assert.deepEqual(store.headKeys, []);
