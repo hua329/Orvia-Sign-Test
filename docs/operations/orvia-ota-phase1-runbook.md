@@ -35,7 +35,9 @@ below is documented for a separately approved and configured operator action.
 
 Run the publisher with `--dry-run` first. It validates the IPA and prints the
 task-scoped result, including the `taskId` and generated `installUrl`, without
-performing either R2 object upload.
+performing either R2 object upload. Capture and record the `taskId` from this
+dry-run before proceeding; retain the same value for the approved upload, HTTP
+verification, and any cleanup or recovery.
 
 ```powershell
 python tools/publish_ota.py --ipa Orvia-signed.ipa --bucket orvia-install --base-url https://orvia-install.ice329.me --dry-run
@@ -47,15 +49,20 @@ identifier, or if the bucket/base URL is not the separate Phase 1 path.
 ## Approved upload
 
 Only after the preflight configuration and dry-run output have received prior
-human approval, run the command without `--dry-run`:
+human approval, and after recording the dry-run `taskId`, run the command without
+`--dry-run` and pass that same ID explicitly:
 
 ```powershell
-python tools/publish_ota.py --ipa Orvia-signed.ipa --bucket orvia-install --base-url https://orvia-install.ice329.me
+python tools/publish_ota.py --ipa Orvia-signed.ipa --bucket orvia-install --base-url https://orvia-install.ice329.me --task-id <taskId-from-dry-run>
 ```
 
 Warning: this command performs the two R2 object uploads. It requires prior human
 approval and configuration, and it must not be run against an existing ice329
-bucket, hostname, Worker, D1 database, or R2 path.
+bucket, hostname, Worker, D1 database, or R2 path. The explicit `--task-id`
+keeps both uploads under the task ID already recorded from the dry-run. The CLI
+prints its final result only after both uploads succeed; if the second upload
+fails, the failed command may not print a task ID, so use the recorded dry-run ID
+for recovery, retry, or cleanup. Do not rerun with a new task ID.
 
 The publisher returns a `taskId`, URLs, and the OTA `installUrl`. The object keys
 must be exactly these task-scoped paths:
@@ -67,6 +74,12 @@ sign/{taskId}/manifest.plist
 
 The IPA upload must use `application/octet-stream`, and the manifest upload must
 use `application/xml`.
+
+If the upload exits nonzero after starting, a partial upload may leave
+`sign/{taskId}/Orvia.ipa` without `sign/{taskId}/manifest.plist`. Use the recorded
+dry-run ID to check the two task-scoped objects. After resolving the cause, retry
+the approved command with the same `--task-id <taskId-from-dry-run>`, or clean up
+only that task's objects.
 
 ## HTTP verification
 
@@ -98,8 +111,11 @@ the installation URL.
 
 ## Cleanup
 
-Record the `taskId` from the publisher output. If cleanup is needed, delete only
-that task's two objects in the separate `orvia-install` bucket:
+Record the `taskId` from the dry-run before any upload and retain it through
+verification. Do not rely on the upload command's final output to recover it: if
+the second upload fails, the command may terminate before printing the result.
+Use the saved dry-run ID if cleanup is needed, and delete only that task's two
+objects in the separate `orvia-install` bucket:
 
 ```text
 sign/{taskId}/Orvia.ipa
