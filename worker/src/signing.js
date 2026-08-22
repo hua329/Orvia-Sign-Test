@@ -14,7 +14,7 @@ function jsonResponse(body, status) {
   });
 }
 
-function tokenMatches(provided, expected) {
+export function tokenMatches(provided, expected) {
   if (typeof provided !== "string" || typeof expected !== "string" || !provided || !expected) {
     return false;
   }

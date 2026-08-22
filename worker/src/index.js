@@ -3,12 +3,15 @@ import {
   parseSigningForm,
   taskErrorKey,
   taskResultKey,
+  tokenMatches,
 } from "./signing.js";
 import { signingPageResponse } from "./site.js";
 
 const TASK_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const TASK_PATH = new RegExp("^/sign/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/(Orvia[.]ipa|manifest[.]plist|icon[.]png)$");
 const STATUS_PATH = new RegExp("^/api/status/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$");
+const SIGNING_CONFIG_KEY = "config/signing.json";
+const ORVIA_ADMIN_TOKEN_HEADER = "X-Orvia-Admin-Token";
 const CONTENT_TYPES = {
   "Orvia.ipa": "application/octet-stream",
   "manifest.plist": "application/xml",
@@ -122,10 +125,68 @@ async function statusResponse(taskId, env) {
   return jsonResponse({ taskId, status: "queued" }, 200);
 }
 
+async function readSigningState(env) {
+  const config = await readJsonObject(env.OTA_BUCKET, SIGNING_CONFIG_KEY);
+  if (config.error) return { enabled: false, updatedAt: null, error: true };
+
+  if (config.missing) {
+    return {
+      enabled: typeof env.ORVIA_SIGNING_ENABLED === "string"
+        && env.ORVIA_SIGNING_ENABLED.trim().toLowerCase() === "true",
+      updatedAt: null,
+      error: false,
+    };
+  }
+
+  if (config.value && typeof config.value.enabled === "boolean") {
+    return {
+      enabled: config.value.enabled,
+      updatedAt: typeof config.value.updatedAt === "string" ? config.value.updatedAt : null,
+      error: false,
+    };
+  }
+
+  return { enabled: false, updatedAt: null, error: false };
+}
+
+function isOrviaAdminRequest(request, env) {
+  return tokenMatches(request.headers.get(ORVIA_ADMIN_TOKEN_HEADER), env.ORVIA_ADMIN_BRIDGE_TOKEN);
+}
+
+async function signingAdminResponse(request, env) {
+  if (!isOrviaAdminRequest(request, env)) return notFound();
+  if (request.method === "GET") {
+    const state = await readSigningState(env);
+    if (state.error) return jsonResponse({ error: "Internal Server Error" }, 500);
+    return jsonResponse({ enabled: state.enabled, updatedAt: state.updatedAt }, 200);
+  }
+  if (request.method !== "POST") return methodNotAllowed("GET, POST");
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return jsonResponse({ error: "Invalid JSON" }, 400);
+  }
+  if (!body || typeof body !== "object" || typeof body.enabled !== "boolean") {
+    return jsonResponse({ error: "Invalid signing state" }, 400);
+  }
+
+  const updatedAt = new Date().toISOString();
+  try {
+    await env.OTA_BUCKET.put(SIGNING_CONFIG_KEY, JSON.stringify({ enabled: body.enabled, updatedAt }), {
+      httpMetadata: { contentType: "application/json; charset=utf-8" },
+    });
+  } catch {
+    return jsonResponse({ error: "Internal Server Error" }, 500);
+  }
+  return jsonResponse({ enabled: body.enabled, updatedAt }, 200);
+}
+
 async function signResponse(request, env) {
-  const signingEnabled = typeof env.ORVIA_SIGNING_ENABLED === "string"
-    && env.ORVIA_SIGNING_ENABLED.trim().toLowerCase() === "true";
-  if (!signingEnabled) return jsonResponse({ error: "Signing temporarily disabled" }, 503);
+  const signingState = await readSigningState(env);
+  if (signingState.error) return jsonResponse({ error: "Signing temporarily unavailable" }, 503);
+  if (!signingState.enabled) return jsonResponse({ error: "Signing temporarily disabled" }, 503);
 
   const parsed = await parseSigningForm(request, env);
   if (!parsed.ok) return parsed.response;
@@ -176,6 +237,10 @@ const worker = {
     if (url.pathname === "/api/sign") {
       if (request.method !== "POST") return methodNotAllowed("POST");
       return signResponse(request, env);
+    }
+
+    if (url.pathname === "/internal/admin/signing") {
+      return signingAdminResponse(request, env);
     }
 
     const statusMatch = STATUS_PATH.exec(url.pathname);

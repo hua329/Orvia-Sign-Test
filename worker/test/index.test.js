@@ -13,12 +13,14 @@ const IPA_ETAG = '"ipa-etag"';
 const MANIFEST_ETAG = '"manifest-etag"';
 const UPLOADED = new Date("2026-08-22T12:34:56.000Z");
 const CACHE_CONTROL = "public, max-age=31536000, immutable";
+const ORVIA_ADMIN_TOKEN = "orvia-admin-secret";
 
 class MemoryBucket {
   constructor(objects) {
     this.objects = new Map(Object.entries(objects));
     this.getKeys = [];
     this.headKeys = [];
+    this.putKeys = [];
   }
 
   async get(key) {
@@ -29,6 +31,12 @@ class MemoryBucket {
   async head(key) {
     this.headKeys.push(key);
     return this.objects.get(key) ?? null;
+  }
+
+  async put(key, value, options = {}) {
+    this.putKeys.push(key);
+    const body = typeof value === "string" ? value : await new Response(value).text();
+    this.objects.set(key, r2Object(body, options.httpMetadata?.contentType ?? "application/octet-stream", '"config-etag"'));
   }
 }
 
@@ -74,8 +82,45 @@ function rawRequest(pathname, init = {}) {
 }
 
 function env(store) {
-  return { OTA_BUCKET: store };
+  return { OTA_BUCKET: store, ORVIA_ADMIN_BRIDGE_TOKEN: ORVIA_ADMIN_TOKEN };
 }
+
+test("rejects the Orvia admin signing endpoint without its bridge token", async () => {
+  const store = bucket();
+  const response = await worker.fetch(request("/internal/admin/signing"), env(store));
+  assert.equal(response.status, 404);
+  assert.deepEqual(store.getKeys, []);
+  assert.deepEqual(store.putKeys, []);
+});
+
+test("allows the existing admin Worker to read and change the signing switch", async () => {
+  const store = bucket();
+  const initial = await worker.fetch(request("/internal/admin/signing", {
+    headers: { "X-Orvia-Admin-Token": ORVIA_ADMIN_TOKEN },
+  }), env(store));
+  assert.equal(initial.status, 200);
+  assert.deepEqual(await initial.json(), { enabled: false, updatedAt: null });
+
+  const update = await worker.fetch(request("/internal/admin/signing", {
+    method: "POST",
+    headers: {
+      "X-Orvia-Admin-Token": ORVIA_ADMIN_TOKEN,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ enabled: true }),
+  }), env(store));
+  assert.equal(update.status, 200);
+  const updateBody = await update.json();
+  assert.equal(updateBody.enabled, true);
+  assert.equal(typeof updateBody.updatedAt, "string");
+  assert.deepEqual(store.putKeys, ["config/signing.json"]);
+
+  const current = await worker.fetch(request("/internal/admin/signing", {
+    headers: { "X-Orvia-Admin-Token": ORVIA_ADMIN_TOKEN },
+  }), env(store));
+  assert.equal(current.status, 200);
+  assert.deepEqual(await current.json(), updateBody);
+});
 
 test("serves the task IPA", async () => {
   const store = bucket();
