@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from pathlib import Path
 import plistlib
+from urllib.parse import quote, urlparse
+import uuid
 import zipfile
 import zlib
 
@@ -18,6 +20,21 @@ class IpaMetadata:
     bundle_version: str
     bundle_short_version: str | None
     info_plist_path: str
+
+
+@dataclass(frozen=True)
+class PublishPlan:
+    task_id: str
+    bundle_identifier: str
+    bundle_version: str
+    bundle_short_version: str | None
+    ipa_key: str
+    manifest_key: str
+    ipa_url: str
+    manifest_url: str
+    install_url: str
+    ipa_content_type: str
+    manifest_content_type: str
 
 
 def _is_info_plist_path(name: str) -> bool:
@@ -86,4 +103,87 @@ def inspect_ipa(path: Path) -> IpaMetadata:
         bundle_version=bundle_version,
         bundle_short_version=short_version,
         info_plist_path=info_plist.filename,
+    )
+
+
+def build_manifest(metadata: IpaMetadata, ipa_url: str) -> bytes:
+    payload = {
+        "items": [{
+            "assets": [{"kind": "software-package", "url": ipa_url}],
+            "metadata": {
+                "bundle-identifier": metadata.bundle_identifier,
+                "bundle-version": metadata.bundle_version,
+                "kind": "software",
+                "title": "Orvia",
+            },
+        }]
+    }
+    return plistlib.dumps(payload, fmt=plistlib.FMT_XML, sort_keys=False)
+
+
+def plan_publish(
+    metadata: IpaMetadata,
+    bucket: str,
+    base_url: str,
+    task_id: str | None = None,
+) -> PublishPlan:
+    if not isinstance(bucket, str) or not bucket.strip():
+        raise PublishError("bucket 不能为空")
+
+    if not isinstance(base_url, str) or not base_url:
+        raise PublishError("公共基址必须为 HTTPS URL")
+
+    try:
+        parsed_base_url = urlparse(base_url)
+        hostname = parsed_base_url.hostname
+        parsed_base_url.port
+    except ValueError as exc:
+        raise PublishError("公共基址必须为有效的 HTTPS URL") from exc
+
+    protected_hosts = {"ice329.me", "www.ice329.me", "downloads.ice329.me"}
+    normalized_hostname = hostname.rstrip(".").lower() if hostname else ""
+    if (
+        parsed_base_url.scheme.lower() != "https"
+        or not parsed_base_url.netloc
+        or not hostname
+        or parsed_base_url.query
+        or parsed_base_url.fragment
+        or "?" in base_url
+        or "#" in base_url
+        or normalized_hostname in protected_hosts
+    ):
+        raise PublishError("公共基址必须为安全的 HTTPS URL")
+
+    if task_id is None:
+        task_id = str(uuid.uuid4())
+    elif not isinstance(task_id, str):
+        raise PublishError("task_id 必须为有效的 UUID")
+    else:
+        try:
+            task_id = str(uuid.UUID(task_id))
+        except (ValueError, AttributeError) as exc:
+            raise PublishError("task_id 必须为有效的 UUID") from exc
+
+    normalized_base_url = base_url[:-1] if base_url.endswith("/") else base_url
+    ipa_key = f"sign/{task_id}/Orvia.ipa"
+    manifest_key = f"sign/{task_id}/manifest.plist"
+    ipa_url = f"{normalized_base_url}/{ipa_key}"
+    manifest_url = f"{normalized_base_url}/{manifest_key}"
+    install_url = (
+        "itms-services://?action=download-manifest&url="
+        + quote(manifest_url, safe="")
+    )
+
+    return PublishPlan(
+        task_id=task_id,
+        bundle_identifier=metadata.bundle_identifier,
+        bundle_version=metadata.bundle_version,
+        bundle_short_version=metadata.bundle_short_version,
+        ipa_key=ipa_key,
+        manifest_key=manifest_key,
+        ipa_url=ipa_url,
+        manifest_url=manifest_url,
+        install_url=install_url,
+        ipa_content_type="application/octet-stream",
+        manifest_content_type="application/xml",
     )
