@@ -3,6 +3,10 @@ name: Sign Orvia IPA
 on:
   workflow_dispatch:
     inputs:
+      task_id:
+        description: 'Lowercase UUID for the Orvia OTA task'
+        required: true
+        type: string
       p12_base64:
         description: 'P12 certificate base64'
         required: true
@@ -15,6 +19,9 @@ on:
         description: 'P12 password'
         required: true
         type: string
+
+permissions:
+  contents: read
 
 jobs:
   sign:
@@ -50,13 +57,14 @@ jobs:
         env:
           P12_PASSWORD: ${{ inputs.p12_password }}
         run: |
+          set -euo pipefail
           ./zsign-bin \
             -k cert.p12 \
             -p "$P12_PASSWORD" \
             -m profile.mobileprovision \
             -b com.ice.orvia \
             -o Orvia-signed.ipa \
-            Orvia.ipa
+            Orvia-unsigned.ipa
 
       - name: Upload signed IPA
         uses: actions/upload-artifact@v4
@@ -65,7 +73,92 @@ jobs:
           path: Orvia-signed.ipa
           retention-days: 1
 
+      - name: Extract OTA icon
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+
+          with zipfile.ZipFile("Orvia-signed.ipa") as archive:
+              candidates = sorted(
+                  name for name in archive.namelist()
+                  if name.startswith("Payload/")
+                  and "/AppIcon" in name
+                  and name.endswith(".png")
+              )
+              if not candidates:
+                  raise SystemExit("No app icon found in signed IPA")
+              Path("icon.png").write_bytes(archive.read(candidates[0]))
+          PY
+
+      - name: Publish OTA files
+        env:
+          TASK_ID: ${{ inputs.task_id }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          python tools/publish_ota.py \
+            --ipa Orvia-signed.ipa \
+            --bucket orvia-beta \
+            --base-url https://beta.ice329.me \
+            --task-id "$TASK_ID" \
+            --account-id "$CLOUDFLARE_ACCOUNT_ID" \
+            > publish-result.json
+
+          python - <<'PY'
+          import json
+          import os
+          import re
+
+          task_id = os.environ["TASK_ID"]
+          if not re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", task_id):
+              raise SystemExit("Invalid task id")
+          with open("publish-result.json", encoding="utf-8") as handle:
+              result = json.load(handle)
+          if result.get("taskId") != task_id or result.get("bundleIdentifier") != "com.ice.orvia":
+              raise SystemExit("Published result does not match the Orvia task contract")
+          PY
+
+          npx --yes wrangler@4.125.0 r2 object put "orvia-beta/sign/$TASK_ID/icon.png" \
+            --remote \
+            --file=icon.png \
+            --content-type=image/png
+          npx --yes wrangler@4.125.0 r2 object put "orvia-beta/sign/$TASK_ID/result.json" \
+            --remote \
+            --file=publish-result.json \
+            --content-type=application/json
+
+          INSTALL_URL=$(python -c 'import json; print(json.load(open("publish-result.json", encoding="utf-8"))["installUrl"])')
+          {
+            echo "## Orvia OTA"
+            echo "- Task ID: `$TASK_ID`"
+            echo "- Bundle ID: `com.ice.orvia`"
+            echo "- Install URL: `$INSTALL_URL`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish failure status
+        if: ${{ failure() }}
+        continue-on-error: true
+        env:
+          TASK_ID: ${{ inputs.task_id }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$TASK_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+            exit 0
+          fi
+          printf '{"taskId":"%s","status":"failed","message":"Signing task failed"}\n' "$TASK_ID" > error.json
+          npx --yes wrangler@4.125.0 r2 object put "orvia-beta/sign/$TASK_ID/error.json" \
+            --remote \
+            --file=error.json \
+            --content-type=application/json
+
       - name: Cleanup
         if: always()
         run: |
-          rm -f cert.p12 profile.mobileprovision
+          rm -f cert.p12 profile.mobileprovision Orvia-signed.ipa icon.png publish-result.json error.json
+          rm -f zsign-bin
+          rm -rf zsign-src
