@@ -1,4 +1,5 @@
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
 import io
 import json
 import plistlib
@@ -123,6 +124,39 @@ class PublishOtaTests(unittest.TestCase):
         joined = " ".join(" ".join(command) for command in commands)
         for forbidden in ("p12", "mobileprovision", "password", "token"):
             self.assertNotIn(forbidden, joined.lower())
+
+    def test_upload_commands_use_module_local_platform_helper(self):
+        from tools.publish_ota import build_upload_commands, plan_publish
+
+        metadata = IpaMetadata("com.ice.orvia", "42", "1.4.2", "Payload/Orvia.app/Info.plist")
+        plan = plan_publish(metadata, "orvia-install", "https://orvia-install.ice329.me", FIXED_TASK_ID)
+        with patch("tools.publish_ota._is_windows", return_value=False):
+            commands = build_upload_commands(plan, Path("signed.ipa"), Path("manifest.plist"))
+        self.assertEqual(commands[0][0], "npx")
+        self.assertEqual(commands[1][0], "npx")
+
+    def test_upload_commands_reject_malformed_plan_before_command_construction(self):
+        from tools.publish_ota import build_upload_commands, plan_publish
+
+        metadata = IpaMetadata("com.ice.orvia", "42", "1.4.2", "Payload/Orvia.app/Info.plist")
+        plan = plan_publish(metadata, "orvia-install", "https://orvia-install.ice329.me", FIXED_TASK_ID)
+        malformed_plans = (
+            replace(plan, bucket="legacy-production"),
+            replace(plan, ipa_key="Orvia.ipa"),
+            replace(plan, manifest_key="manifest.plist"),
+            replace(plan, task_id="{" + FIXED_TASK_ID + "}"),
+            replace(plan, bundle_identifier="com.ice.Orvia"),
+            replace(plan, ipa_content_type="text/plain"),
+            replace(plan, manifest_content_type="text/plain"),
+        )
+        for malformed_plan in malformed_plans:
+            with self.subTest(plan=malformed_plan):
+                with self.assertRaises(PublishError):
+                    build_upload_commands(
+                        malformed_plan,
+                        Path("signed.ipa"),
+                        Path("manifest.plist"),
+                    )
 
     def test_serialize_result_has_exact_output_contract(self):
         from tools.publish_ota import plan_publish, serialize_result
@@ -258,6 +292,18 @@ class PublishOtaTests(unittest.TestCase):
                 with self.assertRaises(PublishError):
                     plan_publish(metadata, "orvia-install", base_url, FIXED_TASK_ID)
 
+    def test_plan_publish_rejects_percent_encoded_protected_hosts(self):
+        from tools.publish_ota import plan_publish
+
+        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        for base_url in (
+            "https://ice329%2eme",
+            "https://downloads%2eice329.me",
+        ):
+            with self.subTest(base_url=base_url):
+                with self.assertRaises(PublishError):
+                    plan_publish(metadata, "orvia-install", base_url, FIXED_TASK_ID)
+
     def test_plan_publish_rejects_unencodable_hostname(self):
         from tools.publish_ota import plan_publish
 
@@ -295,7 +341,7 @@ class PublishOtaTests(unittest.TestCase):
         metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
         plan = plan_publish(metadata, "orvia-install", "https://orvia-install.ice329.me", FIXED_TASK_ID)
         unsafe_ipa_path = Path(self.tempdir.name) / "signed&whoami^%!.ipa"
-        with patch("tools.publish_ota.os.name", "nt"):
+        with patch("tools.publish_ota._is_windows", return_value=True):
             with self.assertRaisesRegex(PublishError, "Windows"):
                 build_upload_commands(plan, unsafe_ipa_path, Path("manifest.plist"))
 
@@ -309,7 +355,7 @@ class PublishOtaTests(unittest.TestCase):
         }, filename="signed&whoami^%!.ipa")
         stdout = io.StringIO()
         stderr = io.StringIO()
-        with patch("tools.publish_ota.os.name", "nt"), patch("tools.publish_ota.subprocess.run") as run:
+        with patch("tools.publish_ota._is_windows", return_value=True), patch("tools.publish_ota.subprocess.run") as run:
             with redirect_stdout(stdout), redirect_stderr(stderr):
                 result = main([
                     "--ipa", str(fixture),

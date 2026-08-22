@@ -16,11 +16,17 @@ import zlib
 
 EXPECTED_BUNDLE_ID: str = "com.ice.orvia"
 PHASE_ONE_BUCKET: str = "orvia-install"
+IPA_CONTENT_TYPE: str = "application/octet-stream"
+MANIFEST_CONTENT_TYPE: str = "application/xml"
 WINDOWS_COMMAND_METACHARACTERS = frozenset('&|<>^()%!"')
 
 
 class PublishError(Exception):
     """A short, user-facing IPA validation failure."""
+
+
+def _is_windows() -> bool:
+    return os.name == "nt"
 
 
 @dataclass(frozen=True)
@@ -44,7 +50,7 @@ class PublishPlan:
     install_url: str
     ipa_content_type: str
     manifest_content_type: str
-    bucket: str = ""
+    bucket: str
 
 
 def _is_info_plist_path(name: str) -> bool:
@@ -159,6 +165,9 @@ def plan_publish(
     except ValueError as exc:
         raise PublishError("公共基址必须为有效的 HTTPS URL") from exc
 
+    if hostname and "%" in hostname:
+        raise PublishError("公共基址必须为安全的 HTTPS URL")
+
     protected_hosts = {"ice329.me", "www.ice329.me", "downloads.ice329.me"}
     try:
         normalized_hostname = (
@@ -213,10 +222,35 @@ def plan_publish(
         ipa_url=ipa_url,
         manifest_url=manifest_url,
         install_url=install_url,
-        ipa_content_type="application/octet-stream",
-        manifest_content_type="application/xml",
+        ipa_content_type=IPA_CONTENT_TYPE,
+        manifest_content_type=MANIFEST_CONTENT_TYPE,
         bucket=bucket,
     )
+
+
+def _validate_upload_plan(plan: PublishPlan) -> None:
+    if not isinstance(plan, PublishPlan):
+        raise PublishError("发布计划无效")
+    if plan.bucket != PHASE_ONE_BUCKET:
+        raise PublishError("发布计划无效")
+    if plan.bundle_identifier != EXPECTED_BUNDLE_ID:
+        raise PublishError("发布计划无效")
+    if not isinstance(plan.task_id, str):
+        raise PublishError("发布计划无效")
+    try:
+        canonical_task_id = str(uuid.UUID(plan.task_id))
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise PublishError("发布计划无效") from exc
+    if canonical_task_id != plan.task_id:
+        raise PublishError("发布计划无效")
+    if plan.ipa_key != f"sign/{canonical_task_id}/Orvia.ipa":
+        raise PublishError("发布计划无效")
+    if plan.manifest_key != f"sign/{canonical_task_id}/manifest.plist":
+        raise PublishError("发布计划无效")
+    if plan.ipa_content_type != IPA_CONTENT_TYPE:
+        raise PublishError("发布计划无效")
+    if plan.manifest_content_type != MANIFEST_CONTENT_TYPE:
+        raise PublishError("发布计划无效")
 
 
 def build_upload_commands(
@@ -224,9 +258,11 @@ def build_upload_commands(
     ipa_path: Path,
     manifest_path: Path,
 ) -> list[list[str]]:
+    _validate_upload_plan(plan)
+    is_windows = _is_windows()
     ipa_file = str(ipa_path)
     manifest_file = str(manifest_path)
-    if os.name == "nt":
+    if is_windows:
         for file_path in (ipa_file, manifest_file):
             if any(
                 ord(character) < 0x20 or character in WINDOWS_COMMAND_METACHARACTERS
@@ -234,7 +270,7 @@ def build_upload_commands(
             ):
                 raise PublishError("Windows 文件路径包含不安全字符")
 
-    executable = "npx.cmd" if os.name == "nt" else "npx"
+    executable = "npx.cmd" if is_windows else "npx"
     return [
         [
             executable,
