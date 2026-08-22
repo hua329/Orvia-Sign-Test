@@ -25,6 +25,7 @@ Orvia 当前已经有经过真机验证的 GitHub Actions + Zsign 签名链路�
   - `CFBundleVersion`；
   - `CFBundleShortVersionString`。
 - 校验 Bundle ID 必须为当前测试值 `com.ice.orvia`。
+- Phase 1 测试期间始终使用小写 `com.ice.orvia`；只有 OTA 闭环在真机上验证成功后，才另行规划切换到正式 Bundle ID `com.ice.Orvia`。
 - 为每次发布生成或接受一个 UUID `taskId`。
 - 生成并上传两个独立对象：
   - `sign/{taskId}/Orvia.ipa`；
