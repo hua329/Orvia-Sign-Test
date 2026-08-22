@@ -1,11 +1,17 @@
+import json
 import plistlib
 import struct
+import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
 
 from tools.publish_ota import IpaMetadata, PublishError, inspect_ipa
+
+
+FIXED_TASK_ID = "00000000-0000-4000-8000-000000000001"
 
 
 def make_ipa(tempdir, metadata):
@@ -70,6 +76,12 @@ class InspectIpaTests(unittest.TestCase):
 
 
 class PublishOtaTests(unittest.TestCase):
+    def setUp(self):
+        self.tempdir = tempfile.TemporaryDirectory()
+
+    def tearDown(self):
+        self.tempdir.cleanup()
+
     def test_build_manifest_contains_ota_metadata(self):
         from tools.publish_ota import build_manifest
 
@@ -92,6 +104,38 @@ class PublishOtaTests(unittest.TestCase):
             plistlib.loads(xml)["items"][0]["assets"][0]["url"],
             "https://orvia-install.ice329.me/sign/t/Orvia.ipa?x=1&y=2",
         )
+
+    def test_upload_commands_set_content_types_and_task_keys(self):
+        from tools.publish_ota import build_upload_commands, plan_publish
+
+        metadata = IpaMetadata("com.ice.orvia", "42", "1.4.2", "Payload/Orvia.app/Info.plist")
+        plan = plan_publish(metadata, "orvia-install", "https://orvia-install.ice329.me", FIXED_TASK_ID)
+        commands = build_upload_commands(plan, Path("signed.ipa"), Path("manifest.plist"))
+        self.assertEqual(len(commands), 2)
+        self.assertIn("orvia-install/" + plan.ipa_key, " ".join(commands[0]))
+        self.assertIn("--content-type=application/octet-stream", commands[0])
+        self.assertIn("--content-type=application/xml", commands[1])
+        joined = " ".join(" ".join(command) for command in commands)
+        for forbidden in ("p12", "mobileprovision", "password", "token"):
+            self.assertNotIn(forbidden, joined.lower())
+
+    def test_cli_dry_run_outputs_json_without_running_wrangler(self):
+        fixture = make_ipa(self.tempdir, {
+            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleVersion": "42",
+            "CFBundleShortVersionString": "1.4.2",
+        })
+        completed = subprocess.run([
+            sys.executable, "tools/publish_ota.py",
+            "--ipa", str(fixture),
+            "--bucket", "orvia-install",
+            "--base-url", "https://orvia-install.ice329.me",
+            "--task-id", FIXED_TASK_ID,
+            "--dry-run",
+        ], check=True, capture_output=True, text=True)
+        output = json.loads(completed.stdout)
+        self.assertEqual(output["bundleIdentifier"], "com.ice.orvia")
+        self.assertTrue(output["installUrl"].startswith("itms-services://"))
 
     def test_plan_publish_isolates_task_and_builds_install_url(self):
         from tools.publish_ota import plan_publish, PublishPlan
