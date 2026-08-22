@@ -58,7 +58,8 @@ identifier, or if the bucket/base URL is not the separate Phase 1 path.
 
 Only after the preflight configuration and dry-run output have received prior
 human approval, and after recording the dry-run `taskId`, run the command without
-`--dry-run` and pass that same ID explicitly:
+`--dry-run` and pass that same ID explicitly. A non-dry-run upload must include
+both the recorded `--task-id` and the validated `--account-id`:
 
 ```powershell
 python tools/publish_ota.py --ipa Orvia-signed.ipa --bucket orvia-install --base-url https://orvia-install.ice329.me --task-id <taskId-from-dry-run> --account-id <32-hex-account-id>

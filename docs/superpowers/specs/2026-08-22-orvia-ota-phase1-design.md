@@ -59,7 +59,7 @@ Orvia 当前已经有经过真机验证的 GitHub Actions + Zsign 签名链路�
 
 执行发布工具前必须已安装 Python 3.10+；执行远程上传前还必须已安装 Node.js、npm 和 npx，并预先完成 Wrangler 身份认证。非 dry-run 上传必须传入严格校验为 32 个十六进制字符的 `--account-id`，工具只将该非敏感值作为 `CLOUDFLARE_ACCOUNT_ID` 传给子进程，不接受 Cloudflare token/password。命令使用 `--yes`，不允许出现安装确认提示。Wrangler 系统要求见 https://developers.cloudflare.com/workers/wrangler/install-and-update/。
 
-CLI 形状如下；dry-run 不要求 `--account-id`，真实上传必须提供同一个已批准的 32-hex account ID：
+CLI 形状如下；dry-run 不要求 `--task-id` 或 `--account-id`，可生成 UUID；真实上传必须显式提供同一个已批准的 `--task-id` 和 32-hex `--account-id`：
 
 ```text
 python tools/publish_ota.py --ipa Orvia-signed.ipa --bucket orvia-install --base-url https://orvia-install.ice329.me --dry-run

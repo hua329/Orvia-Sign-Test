@@ -93,6 +93,22 @@ class InspectIpaTests(unittest.TestCase):
             with self.assertRaisesRegex(PublishError, "IPA 文件无效"):
                 inspect_ipa(ipa)
 
+    def test_inspect_ipa_translates_path_construction_errors(self):
+        for failure in (OSError("path failure"), RuntimeError("path failure"), ValueError("path failure"), TypeError("path failure")):
+            with self.subTest(failure=type(failure).__name__):
+                with patch("tools.publish_ota.Path", side_effect=failure):
+                    with self.assertRaisesRegex(PublishError, "IPA 文件无效"):
+                        inspect_ipa("fixture.ipa")
+
+    def test_inspect_ipa_translates_is_file_errors(self):
+        for failure in (OSError("stat failure"), RuntimeError("stat failure"), ValueError("stat failure"), TypeError("stat failure")):
+            with self.subTest(failure=type(failure).__name__):
+                path_object = MagicMock()
+                path_object.is_file.side_effect = failure
+                with patch("tools.publish_ota.Path", return_value=path_object):
+                    with self.assertRaisesRegex(PublishError, "IPA 文件无效"):
+                        inspect_ipa("fixture.ipa")
+
 
 class PublishOtaTests(unittest.TestCase):
     def setUp(self):
@@ -344,6 +360,50 @@ class PublishOtaTests(unittest.TestCase):
             self.assertFalse((upload_cwd / ".env").exists())
         manifest_file = Path(next(argument for argument in commands[1] if argument.startswith("--file=")).removeprefix("--file="))
         self.assertEqual(manifest_file.parent, Path(run.call_args_list[1].kwargs["cwd"]))
+
+    def test_cli_upload_requires_explicit_task_id_without_temp_or_subprocess(self):
+        from tools.publish_ota import main
+
+        fixture = make_ipa(self.tempdir, {
+            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleVersion": "42",
+        })
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with patch("tools.publish_ota.tempfile.TemporaryDirectory") as temporary_directory, patch("tools.publish_ota.subprocess.run") as run, redirect_stdout(stdout), redirect_stderr(stderr):
+            result = main([
+                "--ipa", str(fixture),
+                "--bucket", "orvia-install",
+                "--base-url", "https://orvia-install.ice329.me",
+                "--account-id", FIXED_ACCOUNT_ID,
+            ])
+
+        self.assertEqual(result, 1)
+        self.assertEqual(stderr.getvalue().strip(), "非 dry-run 上传必须提供 task_id")
+        self.assertEqual(stdout.getvalue(), "")
+        temporary_directory.assert_not_called()
+        run.assert_not_called()
+
+    def test_cli_resolve_failure_returns_publish_error_without_subprocess(self):
+        from tools.publish_ota import main
+
+        path_object = MagicMock()
+        path_object.resolve.side_effect = RuntimeError("resolve failure")
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with patch("tools.publish_ota.Path", return_value=path_object), patch("tools.publish_ota.subprocess.run") as run, redirect_stdout(stdout), redirect_stderr(stderr):
+            result = main([
+                "--ipa", "fixture.ipa",
+                "--bucket", "orvia-install",
+                "--base-url", "https://orvia-install.ice329.me",
+                "--task-id", FIXED_TASK_ID,
+                "--account-id", FIXED_ACCOUNT_ID,
+            ])
+
+        self.assertEqual(result, 1)
+        self.assertEqual(stderr.getvalue().strip(), "IPA 文件无效")
+        self.assertEqual(stdout.getvalue(), "")
+        run.assert_not_called()
 
     def test_cli_upload_requires_account_id_without_subprocess(self):
         from tools.publish_ota import main

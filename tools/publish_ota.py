@@ -98,9 +98,12 @@ def _is_info_plist_path(name: str) -> bool:
 
 
 def inspect_ipa(path: Path) -> IpaMetadata:
-    ipa_path = Path(path)
-    if not ipa_path.is_file() or ipa_path.suffix.lower() != ".ipa":
-        raise PublishError("IPA 文件无效")
+    try:
+        ipa_path = Path(path)
+        if not ipa_path.is_file() or ipa_path.suffix.lower() != ".ipa":
+            raise PublishError("IPA 文件无效")
+    except (OSError, RuntimeError, ValueError, TypeError) as exc:
+        raise PublishError("IPA 文件无效") from exc
 
     try:
         with zipfile.ZipFile(ipa_path) as archive:
@@ -364,7 +367,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        ipa_path = Path(args.ipa).resolve()
+        if not args.dry_run and args.task_id is None:
+            raise PublishError("非 dry-run 上传必须提供 task_id")
+
+        try:
+            ipa_path = Path(args.ipa).resolve()
+        except (OSError, RuntimeError) as exc:
+            raise PublishError("IPA 文件无效") from exc
         metadata = inspect_ipa(ipa_path)
         plan = plan_publish(metadata, args.bucket, args.base_url, args.task_id)
         account_id = _validate_account_id(args.account_id, required=not args.dry_run)
