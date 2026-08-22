@@ -234,7 +234,7 @@ git -c user.name="Codex" -c user.email="codex@local" commit -m "test: define OTA
 - Test: `tests/test_publish_ota.py`
 
 **Interfaces:**
-- `@dataclass(frozen=True) class PublishPlan` with `task_id`, `bundle_identifier`, `bundle_version`, `bundle_short_version`, `ipa_key`, `manifest_key`, `ipa_url`, `manifest_url`, `install_url`, `ipa_content_type`, and `manifest_content_type`.
+- `@dataclass(frozen=True) class PublishPlan` with `task_id`, `bucket`, `bundle_identifier`, `bundle_version`, `bundle_short_version`, `ipa_key`, `manifest_key`, `ipa_url`, `manifest_url`, `install_url`, `ipa_content_type`, and `manifest_content_type`.
 - `def build_manifest(metadata: IpaMetadata, ipa_url: str) -> bytes` returns Apple XML plist bytes.
 - `def plan_publish(metadata: IpaMetadata, bucket: str, base_url: str, task_id: str | None = None) -> PublishPlan`.
 
