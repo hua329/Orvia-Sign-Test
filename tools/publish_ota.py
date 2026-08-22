@@ -347,7 +347,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     subprocess.run(command, check=True, capture_output=True)
             except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
                 raise PublishError(
-                    "R2 上传失败，请检查 Wrangler 登录、bucket 和权限"
+                    "R2 上传失败，请检查 wrangler@4.125.0 登录、bucket 和权限"
                 ) from exc
             print(serialize_result(plan))
 

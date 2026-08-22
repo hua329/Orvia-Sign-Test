@@ -273,6 +273,34 @@ class PublishOtaTests(unittest.TestCase):
         self.assertTrue(commands[0][5].endswith("/Orvia.ipa"))
         self.assertTrue(commands[1][5].endswith("/manifest.plist"))
 
+    def test_cli_upload_failure_reports_pinned_wrangler_error(self):
+        from tools.publish_ota import main
+
+        fixture = make_ipa(self.tempdir, {
+            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleVersion": "42",
+            "CFBundleShortVersionString": "1.4.2",
+        })
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with patch(
+            "tools.publish_ota.subprocess.run",
+            side_effect=subprocess.CalledProcessError(1, ["npx"]),
+        ) as run, redirect_stdout(stdout), redirect_stderr(stderr):
+            result = main([
+                "--ipa", str(fixture),
+                "--bucket", "orvia-install",
+                "--base-url", "https://orvia-install.ice329.me",
+                "--task-id", FIXED_TASK_ID,
+            ])
+
+        self.assertEqual(result, 1)
+        self.assertEqual(
+            stderr.getvalue().strip(),
+            "R2 上传失败，请检查 wrangler@4.125.0 登录、bucket 和权限",
+        )
+        run.assert_called_once()
+
     def test_plan_publish_isolates_task_and_builds_install_url(self):
         from tools.publish_ota import plan_publish, PublishPlan
 
