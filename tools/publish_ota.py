@@ -1,6 +1,13 @@
+import argparse
 from dataclasses import dataclass
+import json
+import os
 from pathlib import Path
 import plistlib
+import subprocess
+import sys
+import tempfile
+from typing import Sequence
 from urllib.parse import quote, urlparse
 import uuid
 import zipfile
@@ -35,6 +42,7 @@ class PublishPlan:
     install_url: str
     ipa_content_type: str
     manifest_content_type: str
+    bucket: str = ""
 
 
 def _is_info_plist_path(name: str) -> bool:
@@ -197,4 +205,90 @@ def plan_publish(
         install_url=install_url,
         ipa_content_type="application/octet-stream",
         manifest_content_type="application/xml",
+        bucket=bucket,
     )
+
+
+def build_upload_commands(
+    plan: PublishPlan,
+    ipa_path: Path,
+    manifest_path: Path,
+) -> list[list[str]]:
+    executable = "npx.cmd" if os.name == "nt" else "npx"
+    return [
+        [
+            executable,
+            "wrangler",
+            "r2",
+            "object",
+            "put",
+            f"{plan.bucket}/{plan.ipa_key}",
+            f"--file={ipa_path}",
+            f"--content-type={plan.ipa_content_type}",
+        ],
+        [
+            executable,
+            "wrangler",
+            "r2",
+            "object",
+            "put",
+            f"{plan.bucket}/{plan.manifest_key}",
+            f"--file={manifest_path}",
+            f"--content-type={plan.manifest_content_type}",
+        ],
+    ]
+
+
+def serialize_result(plan: PublishPlan) -> str:
+    result = {
+        "taskId": plan.task_id,
+        "bundleIdentifier": plan.bundle_identifier,
+        "bundleVersion": plan.bundle_version,
+        "bundleShortVersion": plan.bundle_short_version,
+        "ipaKey": plan.ipa_key,
+        "manifestKey": plan.manifest_key,
+        "ipaUrl": plan.ipa_url,
+        "manifestUrl": plan.manifest_url,
+        "installUrl": plan.install_url,
+    }
+    return json.dumps(result, ensure_ascii=False)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Publish an Orvia OTA IPA")
+    parser.add_argument("--ipa", required=True)
+    parser.add_argument("--bucket", required=True)
+    parser.add_argument("--base-url", required=True)
+    parser.add_argument("--task-id")
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args(argv)
+
+    try:
+        ipa_path = Path(args.ipa)
+        metadata = inspect_ipa(ipa_path)
+        plan = plan_publish(metadata, args.bucket, args.base_url, args.task_id)
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            manifest_path = Path(temporary_directory) / "manifest.plist"
+            manifest_path.write_bytes(build_manifest(metadata, plan.ipa_url))
+
+            if args.dry_run:
+                print(serialize_result(plan))
+                return 0
+
+            try:
+                for command in build_upload_commands(plan, ipa_path, manifest_path):
+                    subprocess.run(command, check=True, capture_output=True)
+            except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
+                raise PublishError(
+                    "R2 上传失败，请检查 Wrangler 登录、bucket 和权限"
+                ) from exc
+
+        return 0
+    except PublishError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
