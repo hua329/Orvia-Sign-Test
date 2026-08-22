@@ -133,6 +133,15 @@ def plan_publish(
     if not isinstance(base_url, str) or not base_url:
         raise PublishError("公共基址必须为 HTTPS URL")
 
+    if any(
+        character == "\\"
+        or character.isspace()
+        or ord(character) < 0x20
+        or ord(character) == 0x7F
+        for character in base_url
+    ):
+        raise PublishError("公共基址包含不安全字符")
+
     try:
         parsed_base_url = urlparse(base_url)
         hostname = parsed_base_url.hostname
@@ -150,6 +159,8 @@ def plan_publish(
         or parsed_base_url.fragment
         or "?" in base_url
         or "#" in base_url
+        or parsed_base_url.username is not None
+        or parsed_base_url.password is not None
         or normalized_hostname in protected_hosts
     ):
         raise PublishError("公共基址必须为安全的 HTTPS URL")

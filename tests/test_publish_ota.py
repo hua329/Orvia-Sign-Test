@@ -116,3 +116,23 @@ class PublishOtaTests(unittest.TestCase):
             with self.subTest(base_url=base_url):
                 with self.assertRaises(PublishError):
                     plan_publish(metadata, "orvia-install", base_url)
+
+    def test_plan_publish_rejects_base_url_userinfo(self):
+        from tools.publish_ota import plan_publish
+
+        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        with self.assertRaises(PublishError):
+            plan_publish(metadata, "orvia-install", "https://user:password@example.com")
+
+    def test_plan_publish_rejects_unsafe_base_url_characters(self):
+        from tools.publish_ota import plan_publish
+
+        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        for base_url in (
+            "https://example.com/path with space",
+            "https://example.com/path\nwith-control",
+            r"https://example.com\unsafe",
+        ):
+            with self.subTest(base_url=base_url):
+                with self.assertRaises(PublishError):
+                    plan_publish(metadata, "orvia-install", base_url)
