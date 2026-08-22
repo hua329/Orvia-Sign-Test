@@ -17,8 +17,8 @@ from tools.publish_ota import IpaMetadata, PublishError, inspect_ipa
 FIXED_TASK_ID = "00000000-0000-4000-8000-000000000001"
 
 
-def make_ipa(tempdir, metadata):
-    ipa_path = Path(tempdir.name) / "fixture.ipa"
+def make_ipa(tempdir, metadata, filename="fixture.ipa"):
+    ipa_path = Path(tempdir.name) / filename
     with zipfile.ZipFile(ipa_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         if metadata is not None:
             archive.writestr(
@@ -116,6 +116,8 @@ class PublishOtaTests(unittest.TestCase):
         commands = build_upload_commands(plan, Path("signed.ipa"), Path("manifest.plist"))
         self.assertEqual(len(commands), 2)
         self.assertIn("orvia-install/" + plan.ipa_key, " ".join(commands[0]))
+        self.assertIn("--file=signed.ipa", commands[0])
+        self.assertIn("--file=manifest.plist", commands[1])
         self.assertIn("--content-type=application/octet-stream", commands[0])
         self.assertIn("--content-type=application/xml", commands[1])
         joined = " ".join(" ".join(command) for command in commands)
@@ -188,6 +190,45 @@ class PublishOtaTests(unittest.TestCase):
         self.assertTrue(plan.install_url.startswith("itms-services://?action=download-manifest&url="))
         self.assertIn("https%3A%2F%2Forvia-install.ice329.me", plan.install_url)
 
+    def test_plan_publish_rejects_every_bucket_except_phase_one_bucket(self):
+        from tools.publish_ota import plan_publish
+
+        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        for bucket in (
+            "legacy-production",
+            "orvia-install ",
+            " orvia-install",
+            "orvia-install/prefix",
+            "orvia-install&whoami",
+            "--help",
+            "",
+            "   ",
+        ):
+            with self.subTest(bucket=bucket):
+                with self.assertRaisesRegex(PublishError, "bucket"):
+                    plan_publish(metadata, bucket, "https://orvia-install.ice329.me", FIXED_TASK_ID)
+
+    def test_plan_publish_rejects_invalid_task_ids(self):
+        from tools.publish_ota import plan_publish
+
+        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        for task_id in ("not-a-uuid", 42):
+            with self.subTest(task_id=task_id):
+                with self.assertRaisesRegex(PublishError, "UUID"):
+                    plan_publish(metadata, "orvia-install", "https://orvia-install.ice329.me", task_id)
+
+    def test_plan_publish_normalizes_supplied_uuid(self):
+        from tools.publish_ota import plan_publish
+
+        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        plan = plan_publish(
+            metadata,
+            "orvia-install",
+            "https://orvia-install.ice329.me",
+            FIXED_TASK_ID.upper(),
+        )
+        self.assertEqual(plan.task_id, FIXED_TASK_ID)
+
     def test_plan_publish_rejects_existing_ice329_download_domains(self):
         from tools.publish_ota import plan_publish, PublishPlan
 
@@ -201,6 +242,32 @@ class PublishOtaTests(unittest.TestCase):
             with self.subTest(base_url=base_url):
                 with self.assertRaises(PublishError):
                     plan_publish(metadata, "orvia-install", base_url)
+
+    def test_plan_publish_rejects_idna_equivalent_protected_hosts(self):
+        from tools.publish_ota import plan_publish
+
+        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        for base_url in (
+            "https://ice329\u3002me",
+            "https://ice329\uff0eme",
+            "https://ice329\uff61me",
+            "https://www\uff0eice329\u3002me",
+            "https://downloads\u3002ice329\uff0eme",
+        ):
+            with self.subTest(base_url=base_url):
+                with self.assertRaises(PublishError):
+                    plan_publish(metadata, "orvia-install", base_url, FIXED_TASK_ID)
+
+    def test_plan_publish_rejects_unencodable_hostname(self):
+        from tools.publish_ota import plan_publish
+
+        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        try:
+            plan_publish(metadata, "orvia-install", "https://\ud800.example.com", FIXED_TASK_ID)
+        except Exception as exc:
+            self.assertIsInstance(exc, PublishError)
+        else:
+            self.fail("an unencodable hostname must be rejected")
 
     def test_plan_publish_rejects_base_url_userinfo(self):
         from tools.publish_ota import plan_publish
@@ -221,3 +288,36 @@ class PublishOtaTests(unittest.TestCase):
             with self.subTest(base_url=base_url):
                 with self.assertRaises(PublishError):
                     plan_publish(metadata, "orvia-install", base_url)
+
+    def test_windows_file_metacharacters_raise_publish_error_before_command_construction(self):
+        from tools.publish_ota import build_upload_commands, plan_publish
+
+        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        plan = plan_publish(metadata, "orvia-install", "https://orvia-install.ice329.me", FIXED_TASK_ID)
+        unsafe_ipa_path = Path(self.tempdir.name) / "signed&whoami^%!.ipa"
+        with patch("tools.publish_ota.os.name", "nt"):
+            with self.assertRaisesRegex(PublishError, "Windows"):
+                build_upload_commands(plan, unsafe_ipa_path, Path("manifest.plist"))
+
+    def test_windows_file_metacharacters_do_not_run_subprocess(self):
+        from tools.publish_ota import main
+
+        fixture = make_ipa(self.tempdir, {
+            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleVersion": "42",
+            "CFBundleShortVersionString": "1.4.2",
+        }, filename="signed&whoami^%!.ipa")
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with patch("tools.publish_ota.os.name", "nt"), patch("tools.publish_ota.subprocess.run") as run:
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                result = main([
+                    "--ipa", str(fixture),
+                    "--bucket", "orvia-install",
+                    "--base-url", "https://orvia-install.ice329.me",
+                    "--task-id", FIXED_TASK_ID,
+                ])
+
+        self.assertEqual(result, 1)
+        self.assertIn("Windows", stderr.getvalue())
+        run.assert_not_called()

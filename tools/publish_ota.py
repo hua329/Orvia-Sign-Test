@@ -15,6 +15,8 @@ import zlib
 
 
 EXPECTED_BUNDLE_ID: str = "com.ice.orvia"
+PHASE_ONE_BUCKET: str = "orvia-install"
+WINDOWS_COMMAND_METACHARACTERS = frozenset('&|<>^()%!"')
 
 
 class PublishError(Exception):
@@ -135,8 +137,8 @@ def plan_publish(
     base_url: str,
     task_id: str | None = None,
 ) -> PublishPlan:
-    if not isinstance(bucket, str) or not bucket.strip():
-        raise PublishError("bucket 不能为空")
+    if bucket != PHASE_ONE_BUCKET:
+        raise PublishError(f"bucket 必须为 {PHASE_ONE_BUCKET}")
 
     if not isinstance(base_url, str) or not base_url:
         raise PublishError("公共基址必须为 HTTPS URL")
@@ -158,11 +160,19 @@ def plan_publish(
         raise PublishError("公共基址必须为有效的 HTTPS URL") from exc
 
     protected_hosts = {"ice329.me", "www.ice329.me", "downloads.ice329.me"}
-    normalized_hostname = hostname.rstrip(".").lower() if hostname else ""
+    try:
+        normalized_hostname = (
+            hostname.encode("idna").decode("ascii").rstrip(".").lower()
+            if hostname
+            else ""
+        )
+    except UnicodeError as exc:
+        raise PublishError("公共基址必须为安全的 HTTPS URL") from exc
     if (
         parsed_base_url.scheme.lower() != "https"
         or not parsed_base_url.netloc
         or not hostname
+        or not normalized_hostname
         or parsed_base_url.query
         or parsed_base_url.fragment
         or "?" in base_url
@@ -214,6 +224,16 @@ def build_upload_commands(
     ipa_path: Path,
     manifest_path: Path,
 ) -> list[list[str]]:
+    ipa_file = str(ipa_path)
+    manifest_file = str(manifest_path)
+    if os.name == "nt":
+        for file_path in (ipa_file, manifest_file):
+            if any(
+                ord(character) < 0x20 or character in WINDOWS_COMMAND_METACHARACTERS
+                for character in file_path
+            ):
+                raise PublishError("Windows 文件路径包含不安全字符")
+
     executable = "npx.cmd" if os.name == "nt" else "npx"
     return [
         [
@@ -223,7 +243,7 @@ def build_upload_commands(
             "object",
             "put",
             f"{plan.bucket}/{plan.ipa_key}",
-            f"--file={ipa_path}",
+            f"--file={ipa_file}",
             f"--content-type={plan.ipa_content_type}",
         ],
         [
@@ -233,7 +253,7 @@ def build_upload_commands(
             "object",
             "put",
             f"{plan.bucket}/{plan.manifest_key}",
-            f"--file={manifest_path}",
+            f"--file={manifest_file}",
             f"--content-type={plan.manifest_content_type}",
         ],
     ]
