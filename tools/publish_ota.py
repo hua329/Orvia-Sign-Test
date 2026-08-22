@@ -283,6 +283,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 raise PublishError(
                     "R2 上传失败，请检查 Wrangler 登录、bucket 和权限"
                 ) from exc
+            print(serialize_result(plan))
 
         return 0
     except PublishError as exc:

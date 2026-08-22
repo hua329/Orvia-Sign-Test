@@ -1,3 +1,5 @@
+from contextlib import redirect_stderr, redirect_stdout
+import io
 import json
 import plistlib
 import struct
@@ -7,6 +9,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+from unittest.mock import patch
 
 from tools.publish_ota import IpaMetadata, PublishError, inspect_ipa
 
@@ -146,6 +149,34 @@ class PublishOtaTests(unittest.TestCase):
         output = json.loads(completed.stdout)
         self.assertEqual(output["bundleIdentifier"], "com.ice.orvia")
         self.assertTrue(output["installUrl"].startswith("itms-services://"))
+
+    def test_cli_upload_outputs_json_after_uploads(self):
+        from tools.publish_ota import main
+
+        fixture = make_ipa(self.tempdir, {
+            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleVersion": "42",
+            "CFBundleShortVersionString": "1.4.2",
+        })
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with patch("tools.publish_ota.subprocess.run") as run, redirect_stdout(stdout), redirect_stderr(stderr):
+            run.return_value = subprocess.CompletedProcess([], 0, stdout=b"", stderr=b"")
+            result = main([
+                "--ipa", str(fixture),
+                "--bucket", "orvia-install",
+                "--base-url", "https://orvia-install.ice329.me",
+                "--task-id", FIXED_TASK_ID,
+            ])
+
+        self.assertEqual(result, 0)
+        output = json.loads(stdout.getvalue())
+        self.assertTrue(output["installUrl"].startswith("itms-services://"))
+        self.assertEqual(stderr.getvalue(), "")
+        self.assertEqual(run.call_count, 2)
+        commands = [call.args[0] for call in run.call_args_list]
+        self.assertTrue(commands[0][5].endswith("/Orvia.ipa"))
+        self.assertTrue(commands[1][5].endswith("/manifest.plist"))
 
     def test_plan_publish_isolates_task_and_builds_install_url(self):
         from tools.publish_ota import plan_publish, PublishPlan
