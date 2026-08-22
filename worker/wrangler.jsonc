@@ -1,0 +1,15 @@
+{
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-22",
+  "workers_dev": false,
+  "routes": [
+    { "pattern": "beta.ice329.me", "custom_domain": true }
+  ],
+  "r2_buckets": [
+    { "binding": "OTA_BUCKET", "bucket_name": "orvia-install" }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

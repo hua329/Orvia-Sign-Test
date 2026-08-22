@@ -1,0 +1,11 @@
+{
+  "name": "orvia-ota-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/index.test.js",
+    "dev": "npx --yes wrangler@4.125.0 dev",
+    "dry-run": "npx --yes wrangler@4.125.0 deploy --dry-run",
+    "deploy": "npx --yes wrangler@4.125.0 deploy"
+  }
+}

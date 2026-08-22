@@ -1,3 +1,6 @@
 __pycache__/
 *.py[cod]
 .worktrees/
+worker/node_modules/
+worker/.wrangler/
+worker/worker-configuration.d.ts
