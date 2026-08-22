@@ -43,22 +43,20 @@ class WorkflowContractTests(unittest.TestCase):
 
     def test_documents_only_orvia_secret_and_browser_acceptance_flow(self):
         for value in [
-            "ORVIA_ACCESS_TOKEN",
-            "ORVIA_SIGNING_ENABLED",
             "GITHUB_TOKEN",
             "CLOUDFLARE_API_TOKEN",
             "CLOUDFLARE_ACCOUNT_ID",
             "https://beta.ice329.me/",
+            "https://admin.ice329.me/",
+            "Orvia OTA",
             "/api/status/",
             "wzautotool",
             "wz-auto-updates",
             "com.ice.orvia",
         ]:
             self.assertIn(value, self.runbook)
-        self.assertIn("pnpm.cmd dlx wrangler@4.125.0 secret put ORVIA_ACCESS_TOKEN", self.runbook)
-        self.assertIn("pnpm.cmd dlx wrangler@4.125.0 secret put ORVIA_SIGNING_ENABLED", self.runbook)
-        self.assertIn("`true`", self.runbook)
-        self.assertIn("`false`", self.runbook)
+        self.assertNotIn("ORVIA_ACCESS_TOKEN", self.runbook)
+        self.assertIn("不再要求访问令牌", self.runbook)
         self.assertIn("iPhone Safari", self.runbook)
 
 

@@ -8,28 +8,29 @@ downloads.
 
 ## Behavior
 
-`ORVIA_SIGNING_ENABLED` is read from the existing `orvia-ota-worker` Worker
-environment. Only the exact case-insensitive string `true` enables new signing
-requests. Missing, empty, or any other value disables them.
+The existing `orvia-ota-worker` exposes a backend-only signing switch through
+the existing `orvia-beta` R2 bucket. Missing configuration keeps signing
+disabled; the admin page writes an explicit boolean state for the Orvia Worker.
 
 When disabled, `POST /api/sign` returns HTTP 503 with a generic JSON error and
 does not parse multipart data or dispatch GitHub. `GET /`, `/api/status/...`,
 and existing `/sign/...` object routes remain available. When enabled, the
-existing access-token validation and GitHub workflow dispatch remain unchanged.
+signing page accepts only p12, mobileprovision, and password fields and dispatches
+the existing GitHub workflow.
 
 ## Operations
 
-The operator toggles only this Orvia Worker secret/configuration value through
-Wrangler. No KV, D1, new Worker, new R2 bucket, DNS, or other Cloudflare
-resource is added. Existing OTA objects are not deleted or disabled by the
-switch.
+The operator toggles only this Orvia state from the existing Access-protected
+admin page. The Worker uses the existing `orvia-beta` bucket for the bounded
+configuration object; no KV, D1, new Worker, new R2 bucket, DNS, or other
+Cloudflare resource is added. Existing OTA objects are not deleted or disabled
+by the switch.
 
 ## Safety
 
-The default is closed. This toggle is not an identity system: enabling signing
-does not make anonymous upload safe and does not remove the existing access
-token requirement. The formal uppercase Bundle ID and all non-Orvia resources
-remain untouched.
+The default is closed. Enabling signing deliberately permits public submission
+from the signing page; the admin switch is the control for accepting new jobs.
+The formal uppercase Bundle ID and all non-Orvia resources remain untouched.
 
 ## Verification
 

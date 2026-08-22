@@ -31,7 +31,7 @@ GitHub Summary。GitHub 仓库必须保持私有，因为 MVP 的 workflow input
 ```text
 测试者浏览器
   -> beta.ice329.me/
-  -> POST /api/sign（访问令牌 + p12 + mobileprovision + 密码）
+  -> POST /api/sign（p12 + mobileprovision + 密码；由管理后台开关控制）
   -> 私有 GitHub Actions + 原有 zsign 链路
   -> R2 orvia-beta/sign/{taskId}/
   -> GET /api/status/{taskId}
@@ -65,8 +65,6 @@ GET|HEAD /sign/{taskId}/icon.png
 
 ```powershell
 Push-Location worker
-pnpm.cmd dlx wrangler@4.125.0 secret put ORVIA_ACCESS_TOKEN
-pnpm.cmd dlx wrangler@4.125.0 secret put ORVIA_SIGNING_ENABLED
 pnpm.cmd dlx wrangler@4.125.0 secret put GITHUB_TOKEN
 pnpm.cmd dlx wrangler@4.125.0 secret put GITHUB_OWNER
 pnpm.cmd dlx wrangler@4.125.0 secret put GITHUB_REPO
@@ -75,12 +73,12 @@ Pop-Location
 ```
 
 推荐 `GITHUB_WORKFLOW` 使用 `sign.yml`，`GITHUB_REF` 不配置时默认为
-`main`。`ORVIA_ACCESS_TOKEN` 是测试者打开网站时填写的访问令牌；它不是
-GitHub token，也不会发送到浏览器脚本之外的页面内容。
+`main`。这些值只用于 Worker 调度当前私有 GitHub 仓库的 workflow。
 
-`ORVIA_SIGNING_ENABLED` 只接受两个操作值：输入 `true` 开启新签名任务，
-输入 `false` 关闭新签名任务。缺省或其他值也会保持关闭。关闭时网站和已有
-OTA 链接仍可访问，只是 `/api/sign` 返回 503；开启时仍然需要访问令牌。
+签名开关在 `https://admin.ice329.me/` 的 **Orvia OTA** 页面操作。关闭时网站
+和已有 OTA 链接仍可访问，只是 `/api/sign` 返回 503；开启后页面只需要提交
+p12、mobileprovision 和 p12 密码，不再要求访问令牌。开关关闭是唯一的签名
+入口控制；开启期间，任何拿到 `beta.ice329.me` 链接的人都可以提交签名任务。
 
 在 GitHub 私有仓库的 Settings → Secrets and variables → Actions 中，仅添加：
 
@@ -145,8 +143,8 @@ Pop-Location
 
 ## 4. 浏览器签名测试
 
-1. 在浏览器打开 `https://beta.ice329.me/`。
-2. 输入 `ORVIA_ACCESS_TOKEN` 对应的访问令牌。
+1. 管理员在 `https://admin.ice329.me/` 的 **Orvia OTA** 页面开启签名入口。
+2. 在浏览器打开 `https://beta.ice329.me/`。
 3. 选择测试者自己的 p12 和匹配的 mobileprovision，填写 p12 密码。
 4. 提交后记录页面返回的 lowercase `taskId`，不要记录证书内容或密码。
 5. 页面会轮询 `/api/status/{taskId}`；queued 表示等待，complete 表示已发布，
@@ -213,6 +211,6 @@ Pop-Location
 
 ## 安全边界
 
-不要把 token、p12、mobileprovision、密码、签名 IPA 或设备标识符提交到仓库
-或发送到聊天。不要做匿名上传。不要改动原有签名链路、正式 uppercase IPA、
+不要把 p12、mobileprovision、密码、签名 IPA 或设备标识符提交到仓库或发送到
+聊天。签名入口只由管理后台开关控制；不要改动原有签名链路、正式 uppercase IPA、
 Bundle ID 或任何非 Orvia Cloudflare 资源。

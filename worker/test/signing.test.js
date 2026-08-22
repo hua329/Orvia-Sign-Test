@@ -8,9 +8,7 @@ import {
 } from "../src/signing.js";
 
 const TASK_ID = "123e4567-e89b-12d3-a456-426614174000";
-const ACCESS_TOKEN = "orvia-access-token";
 const ENV = {
-  ORVIA_ACCESS_TOKEN: ACCESS_TOKEN,
   GITHUB_TOKEN: "github-token",
   GITHUB_OWNER: "ice-owner",
   GITHUB_REPO: "orvia-sign-test",
@@ -18,7 +16,7 @@ const ENV = {
   GITHUB_REF: "main",
 };
 
-function multipartRequest({ token = ACCESS_TOKEN, extra = false } = {}) {
+function multipartRequest({ extra = false } = {}) {
   const form = new FormData();
   form.set("p12", new File(["p12-bytes"], "cert.p12"));
   form.set("mobileprovision", new File(["profile-bytes"], "profile.mobileprovision"));
@@ -26,21 +24,13 @@ function multipartRequest({ token = ACCESS_TOKEN, extra = false } = {}) {
   if (extra) form.set("unexpected", "value");
   return new Request("https://beta.ice329.me/api/sign", {
     method: "POST",
-    headers: { "X-Orvia-Access-Token": token },
     body: form,
   });
 }
 
-test("rejects missing access token before reading form data", async () => {
-  const request = {
-    headers: { get: () => null },
-    async formData() {
-      throw new Error("form data must not be read");
-    },
-  };
-  const result = await parseSigningForm(request, ENV);
-  assert.equal(result.ok, false);
-  assert.equal(result.response.status, 401);
+test("accepts multipart signing data without an access token", async () => {
+  const result = await parseSigningForm(multipartRequest(), ENV);
+  assert.equal(result.ok, true);
 });
 
 test("encodes p12 and profile and preserves password", async () => {

@@ -3,7 +3,6 @@ import { test } from "node:test";
 import worker from "../src/index.js";
 
 const TASK_ID = "123e4567-e89b-12d3-a456-426614174000";
-const ACCESS_TOKEN = "test-access-token";
 const P12_BYTES = "p12-secret-bytes";
 const PROFILE_BYTES = "profile-secret-bytes";
 const PASSWORD = "p12-password";
@@ -27,7 +26,6 @@ function request(pathname, init = {}) {
 function baseEnv(bucket = new MemoryBucket()) {
   return {
     OTA_BUCKET: bucket,
-    ORVIA_ACCESS_TOKEN: ACCESS_TOKEN,
     GITHUB_OWNER: "ice-owner",
     GITHUB_REPO: "orvia-private",
     GITHUB_WORKFLOW: "sign.yml",
@@ -37,7 +35,7 @@ function baseEnv(bucket = new MemoryBucket()) {
   };
 }
 
-function signingRequest({ token = ACCESS_TOKEN, fields = {} } = {}) {
+function signingRequest({ fields = {} } = {}) {
   const form = new FormData();
   form.set("p12", new Blob([P12_BYTES], { type: "application/x-pkcs12" }), "cert.p12");
   form.set("mobileprovision", new Blob([PROFILE_BYTES], { type: "application/octet-stream" }), "profile.mobileprovision");
@@ -45,7 +43,6 @@ function signingRequest({ token = ACCESS_TOKEN, fields = {} } = {}) {
   for (const [name, value] of Object.entries(fields)) form.set(name, value);
   return request("/api/sign", {
     method: "POST",
-    headers: { "X-Orvia-Access-Token": token },
     body: form,
   });
 }
@@ -67,6 +64,7 @@ test("serves the Orvia signing page without exposing worker secrets", async () =
   assert.match(html, /Orvia OTA/);
   assert.match(html, /mobileprovision/);
   assert.match(html, /\/api\/sign/);
+  assert.doesNotMatch(html, /访问令牌|access-token|X-Orvia-Access-Token/);
   assert.doesNotMatch(html, /GITHUB_TOKEN/);
   assert.doesNotMatch(html, /p12_password/);
 });
@@ -93,7 +91,7 @@ test("keeps new signing disabled when the switch is missing", async () => {
   assert.deepEqual(await response.json(), { error: "Signing temporarily disabled" });
 });
 
-test("queues an authenticated signing request and forwards only the workflow payload", async () => {
+test("queues a signing request without an access token and forwards only the workflow payload", async () => {
   const calls = [];
   const env = baseEnv();
   env.GITHUB_FETCH = async (url, init) => {
@@ -116,19 +114,6 @@ test("queues an authenticated signing request and forwards only the workflow pay
   assert.equal(atob(payload.inputs.profile_base64), PROFILE_BYTES);
   assert.equal(calls[0].init.headers.Authorization, "Bearer github-secret");
   assert.doesNotMatch(JSON.stringify(body), /p12-password|p12-secret-bytes|profile-secret-bytes/);
-});
-
-test("rejects signing without the Orvia access token before dispatch", async () => {
-  let dispatched = false;
-  const env = baseEnv();
-  env.GITHUB_FETCH = async () => {
-    dispatched = true;
-    return new Response(null, { status: 204 });
-  };
-  const response = await worker.fetch(signingRequest({ token: "wrong-token" }), env);
-  assert.equal(response.status, 401);
-  assert.deepEqual(await response.json(), { error: "Unauthorized" });
-  assert.equal(dispatched, false);
 });
 
 test("returns queued when no task result exists", async () => {

@@ -30,9 +30,8 @@ export const SIGNING_PAGE = `<!doctype html>
 <body>
   <main>
     <h1>Orvia OTA 签名测试</h1>
-    <p class="hint">上传测试证书和描述文件后，系统会自动签名并生成 iPhone 安装链接。证书只用于当前任务。</p>
+    <p class="hint">后台开启签名后，上传测试证书和描述文件，系统会自动签名并生成 iPhone 安装链接。证书只用于当前任务。</p>
     <form id="sign-form" enctype="multipart/form-data">
-      <label>访问令牌 <small>由管理员提供</small><input id="access-token" name="access-token" type="password" autocomplete="off" required></label>
       <label>p12 证书<input name="p12" type="file" accept=".p12,application/x-pkcs12" required></label>
       <label>mobileprovision 描述文件<input name="mobileprovision" type="file" accept=".mobileprovision,application/octet-stream" required></label>
       <label>p12 密码<input name="password" type="password" autocomplete="off" required></label>
@@ -79,12 +78,9 @@ export const SIGNING_PAGE = `<!doctype html>
       install.style.display = "none";
       status.textContent = "正在提交签名任务…";
       const data = new FormData(form);
-      const token = data.get("access-token");
-      data.delete("access-token");
       try {
         const response = await fetch("/api/sign", {
           method: "POST",
-          headers: { "X-Orvia-Access-Token": token },
           body: data,
         });
         const result = await response.json();

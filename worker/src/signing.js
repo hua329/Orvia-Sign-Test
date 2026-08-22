@@ -46,11 +46,6 @@ function isFile(value) {
 }
 
 export async function parseSigningForm(request, env) {
-  const providedToken = request.headers?.get("X-Orvia-Access-Token");
-  if (!tokenMatches(providedToken, env.ORVIA_ACCESS_TOKEN)) {
-    return { ok: false, response: jsonResponse({ error: "Unauthorized" }, 401) };
-  }
-
   let form;
   try {
     form = await request.formData();
