@@ -16,6 +16,8 @@ import zlib
 
 EXPECTED_BUNDLE_ID: str = "com.ice.orvia"
 PHASE_ONE_BUCKET: str = "orvia-install"
+PHASE_TWO_BUCKET: str = "orvia-beta"
+ALLOWED_BUCKETS = frozenset({PHASE_ONE_BUCKET, PHASE_TWO_BUCKET})
 IPA_CONTENT_TYPE: str = "application/octet-stream"
 MANIFEST_CONTENT_TYPE: str = "application/xml"
 WINDOWS_COMMAND_METACHARACTERS = frozenset('&|<>^()%!"')
@@ -182,8 +184,8 @@ def plan_publish(
     base_url: str,
     task_id: str | None = None,
 ) -> PublishPlan:
-    if bucket != PHASE_ONE_BUCKET:
-        raise PublishError(f"bucket 必须为 {PHASE_ONE_BUCKET}")
+    if bucket not in ALLOWED_BUCKETS:
+        raise PublishError(f"bucket 必须为 {PHASE_ONE_BUCKET} 或 {PHASE_TWO_BUCKET}")
 
     if not isinstance(base_url, str) or not base_url:
         raise PublishError("公共基址必须为 HTTPS URL")
@@ -273,7 +275,7 @@ def plan_publish(
 def _validate_upload_plan(plan: PublishPlan) -> None:
     if not isinstance(plan, PublishPlan):
         raise PublishError("发布计划无效")
-    if plan.bucket != PHASE_ONE_BUCKET:
+    if plan.bucket not in ALLOWED_BUCKETS:
         raise PublishError("发布计划无效")
     if plan.bundle_identifier != EXPECTED_BUNDLE_ID:
         raise PublishError("发布计划无效")

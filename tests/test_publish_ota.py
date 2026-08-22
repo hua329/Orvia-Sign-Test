@@ -535,7 +535,7 @@ class PublishOtaTests(unittest.TestCase):
         self.assertTrue(plan.install_url.startswith("itms-services://?action=download-manifest&url="))
         self.assertIn("https%3A%2F%2Forvia-install.ice329.me", plan.install_url)
 
-    def test_plan_publish_rejects_every_bucket_except_phase_one_bucket(self):
+    def test_plan_publish_rejects_unapproved_buckets(self):
         from tools.publish_ota import plan_publish
 
         metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
@@ -552,6 +552,14 @@ class PublishOtaTests(unittest.TestCase):
             with self.subTest(bucket=bucket):
                 with self.assertRaisesRegex(PublishError, "bucket"):
                     plan_publish(metadata, bucket, "https://orvia-install.ice329.me", FIXED_TASK_ID)
+
+    def test_plan_publish_accepts_phase_two_bucket(self):
+        from tools.publish_ota import plan_publish
+
+        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        plan = plan_publish(metadata, "orvia-beta", "https://beta.ice329.me", FIXED_TASK_ID)
+        self.assertEqual(plan.bucket, "orvia-beta")
+        self.assertEqual(plan.ipa_url, f"https://beta.ice329.me/{plan.ipa_key}")
 
     def test_plan_publish_rejects_invalid_task_ids(self):
         from tools.publish_ota import plan_publish

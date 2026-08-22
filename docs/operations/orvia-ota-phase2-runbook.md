@@ -12,7 +12,7 @@ Keep these values exact throughout the handoff:
 | Item | Required value |
 | --- | --- |
 | App Bundle ID | `com.ice.orvia` |
-| R2 bucket | `orvia-install` |
+| R2 bucket | `orvia-beta` |
 | Worker public host | `beta.ice329.me` |
 | IPA object key | `sign/{taskId}/Orvia.ipa` |
 | Manifest object key | `sign/{taskId}/manifest.plist` |
@@ -92,8 +92,8 @@ and confirm all of the following:
   ```
 
 - The account already owns or controls the `ice329.me` zone.
-- The exact existing R2 bucket is `orvia-install`. Do not create, select, or
-  substitute another bucket for this handoff.
+- The exact Phase 2 R2 bucket is `orvia-beta`. Create it if it does not exist;
+  do not select or substitute another bucket for this handoff.
 - `beta.ice329.me` is available for the Worker custom domain and the operator has
   explicit approval for any Custom Domain, DNS, or certificate mutation needed to
   make it serve HTTPS.
@@ -106,7 +106,7 @@ The only accepted public base URL for Phase 2 is
 `https://beta.ice329.me`. Treat the legacy root host `ice329.me`,
 `www.ice329.me`, `downloads.ice329.me`, and every other hostname as a hard stop;
 do not pass any of them to the publisher. Treat any bucket other than
-`orvia-install` as a hard stop as well.
+`orvia-beta` as a hard stop as well.
 
 No local check above authorizes this live gate. If the account, zone, bucket,
 custom-domain availability, certificate/DNS approval, or input Bundle ID cannot
@@ -129,7 +129,7 @@ be run as part of the local gate without the separate approval. Record the
 deployment result, Worker version, account, host, and timestamp.
 
 The deployed Worker remains read-only. It serves only the exact task-scoped keys
-below through the `OTA_BUCKET` binding to `orvia-install`:
+below through the `OTA_BUCKET` binding to `orvia-beta`:
 
 ```text
 sign/{taskId}/Orvia.ipa
@@ -146,7 +146,7 @@ IPA, generates the manifest, and prints the task-scoped URLs without uploading
 either object:
 
 ```powershell
-python tools/publish_ota.py --ipa Orvia-signed.ipa --bucket orvia-install --base-url https://beta.ice329.me --dry-run
+python tools/publish_ota.py --ipa Orvia.ipa --bucket orvia-beta --base-url https://beta.ice329.me --dry-run
 ```
 
 Save the JSON output and record its `taskId`, `ipaKey`, `manifestKey`,
@@ -160,14 +160,15 @@ Only after the dry-run output and the upload have separate human approval, run
 the approved upload with the same recorded task ID and a 32-hex account ID:
 
 ```powershell
-python tools/publish_ota.py --ipa Orvia-signed.ipa --bucket orvia-install --base-url https://beta.ice329.me --task-id <taskId-from-dry-run> --account-id <32-hex-account-id>
+python tools/publish_ota.py --ipa Orvia.ipa --bucket orvia-beta --base-url https://beta.ice329.me --task-id <taskId-from-dry-run> --account-id <32-hex-account-id>
 ```
 
 This command performs the two R2 object uploads. The publisher invokes the pinned
-`npx --yes wrangler@4.125.0 r2 object put ... --remote` path for the exact
-`orvia-install` bucket and applies `application/octet-stream` to the IPA and
-`application/xml` to the manifest. Do not remove `--remote`, change the bucket,
-change the base URL, or rerun with a newly generated task ID.
+`orvia-beta` bucket and applies `application/octet-stream` to the IPA and
+`application/xml` to the manifest. In environments without `npx`, use the
+equivalent pinned `pnpm.cmd dlx wrangler@4.125.0` commands from the recorded
+plan. Do not remove `--remote`, change the bucket, change the base URL, or rerun
+with a newly generated task ID.
 
 If the upload exits nonzero after starting, the first object may exist while the
 manifest does not. Keep the dry-run task ID, inspect only that task prefix, and
@@ -225,7 +226,7 @@ successful HTTP check alone is not an iPhone acceptance result.
 
 Cleanup is allowed only after an approved operator has confirmed the recorded
 task ID and the reason for cleanup. Delete only these two possible objects under
-the exact `orvia-install` bucket and recorded task prefix:
+the exact `orvia-beta` bucket and recorded task prefix:
 
 ```text
 sign/{taskId}/Orvia.ipa

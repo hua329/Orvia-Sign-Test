@@ -7,7 +7,7 @@
     { "pattern": "beta.ice329.me", "custom_domain": true }
   ],
   "r2_buckets": [
-    { "binding": "OTA_BUCKET", "bucket_name": "orvia-install" }
+    { "binding": "OTA_BUCKET", "bucket_name": "orvia-beta" }
   ],
   "observability": {
     "enabled": true,
