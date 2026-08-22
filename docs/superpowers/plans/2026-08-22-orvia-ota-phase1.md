@@ -17,6 +17,7 @@
 - Every object key must be under `sign/{taskId}/`; do not publish a shared root `Orvia.ipa`.
 - Tests must not connect to Cloudflare or execute Wrangler.
 - Approved uploads require Python 3.10+, Node.js, npm, and npx to be installed, prior Wrangler authentication, and a validated 32-hex-character Cloudflare account ID; `npx --yes` is mandatory so no package-installation prompt is allowed.
+- Wrangler system requirements: https://developers.cloudflare.com/workers/wrangler/install-and-update/.
 - Before claiming completion, run the focused tests, the full test suite, dry-run output verification, and repository status checks.
 
 ## File Map
