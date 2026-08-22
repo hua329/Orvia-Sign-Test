@@ -177,8 +177,12 @@ output.
 
 ## 5. HTTP verification
 
-After the approved upload, check both objects through the exact Phase 2 HTTPS
-host. These commands issue `HEAD` requests, which the read-only Worker supports:
+HTTP verification is a separate live gate. After the approved upload and before
+running either `curl.exe -I` command, record a separate approval for HTTP
+verification with the recorded task ID, upload result, and exact URLs. Approval
+for the R2 upload does not automatically authorize this stage. Only after that
+approval is recorded, check both objects through the exact Phase 2 HTTPS host.
+These commands issue `HEAD` requests, which the read-only Worker supports:
 
 ```powershell
 curl.exe -I https://beta.ice329.me/sign/<taskId>/Orvia.ipa
@@ -199,7 +203,11 @@ iPhone acceptance until both task-scoped objects pass these checks.
 
 ## 6. iPhone Safari acceptance
 
-Use the `installUrl` recorded from the approved publisher result:
+iPhone acceptance is a separate live gate. After HTTP verification has passed and
+before opening Safari, record a separate approval for iPhone acceptance with the
+recorded task ID and HTTP results. HTTP-verification approval or a passing HTTP
+check does not automatically authorize this stage. Then use the `installUrl`
+recorded from the approved publisher result:
 
 1. On the target iPhone, open the `installUrl` in Safari.
 2. Confirm that iOS presents the installation prompt for Orvia.
@@ -245,5 +253,6 @@ change:
 Never paste tokens, passwords, p12 contents, or profile contents into this
 runbook or a command. The account ID is a non-secret routing value but must still
 be checked as exactly 32 hexadecimal characters before the approved upload. Keep
-local verification, live Cloudflare mutation, R2 upload, and iPhone acceptance
-as separate recorded gates.
+local verification, live Cloudflare mutation, R2 upload, HTTP verification, and
+iPhone acceptance as separate recorded gates; approval for one named stage does
+not automatically authorize the next stage.
