@@ -460,7 +460,7 @@ Run:
 
 ```powershell
 python tools/publish_ota.py --ipa Orvia.ipa --bucket orvia-install --base-url https://orvia-install.ice329.me --dry-run
-git diff HEAD~7 -- .github/workflows/sign.yml Orvia.ipa
+git diff 9fd36ab -- .github/workflows/sign.yml Orvia.ipa
 git status --short
 ```
 
