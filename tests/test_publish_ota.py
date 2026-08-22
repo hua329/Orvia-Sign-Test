@@ -67,3 +67,52 @@ class InspectIpaTests(unittest.TestCase):
 
         with self.assertRaisesRegex(PublishError, "IPA 文件无效"):
             inspect_ipa(ipa)
+
+
+class PublishOtaTests(unittest.TestCase):
+    def test_build_manifest_contains_ota_metadata(self):
+        from tools.publish_ota import build_manifest
+
+        metadata = IpaMetadata("com.ice.orvia", "42", "1.4.2", "Payload/Orvia.app/Info.plist")
+        manifest = plistlib.loads(build_manifest(metadata, "https://orvia-install.ice329.me/sign/t/Orvia.ipa"))
+        item = manifest["items"][0]
+        self.assertEqual(item["assets"][0]["kind"], "software-package")
+        self.assertEqual(item["assets"][0]["url"], "https://orvia-install.ice329.me/sign/t/Orvia.ipa")
+        self.assertEqual(item["metadata"]["bundle-identifier"], "com.ice.orvia")
+        self.assertEqual(item["metadata"]["bundle-version"], "42")
+        self.assertEqual(item["metadata"]["title"], "Orvia")
+
+    def test_build_manifest_escapes_xml_url_values(self):
+        from tools.publish_ota import build_manifest
+
+        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        xml = build_manifest(metadata, "https://orvia-install.ice329.me/sign/t/Orvia.ipa?x=1&y=2")
+        self.assertIn(b"&amp;", xml)
+        self.assertEqual(
+            plistlib.loads(xml)["items"][0]["assets"][0]["url"],
+            "https://orvia-install.ice329.me/sign/t/Orvia.ipa?x=1&y=2",
+        )
+
+    def test_plan_publish_isolates_task_and_builds_install_url(self):
+        from tools.publish_ota import plan_publish, PublishPlan
+
+        metadata = IpaMetadata("com.ice.orvia", "42", "1.4.2", "Payload/Orvia.app/Info.plist")
+        plan = plan_publish(metadata, "orvia-install", "https://orvia-install.ice329.me", "00000000-0000-4000-8000-000000000001")
+        self.assertEqual(plan.ipa_key, "sign/00000000-0000-4000-8000-000000000001/Orvia.ipa")
+        self.assertIn("manifest.plist", plan.manifest_url)
+        self.assertTrue(plan.install_url.startswith("itms-services://?action=download-manifest&url="))
+        self.assertIn("https%3A%2F%2Forvia-install.ice329.me", plan.install_url)
+
+    def test_plan_publish_rejects_existing_ice329_download_domains(self):
+        from tools.publish_ota import plan_publish, PublishPlan
+
+        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        for base_url in (
+            "http://orvia-install.ice329.me",
+            "https://downloads.ice329.me",
+            "https://ice329.me",
+            "https://www.ice329.me",
+        ):
+            with self.subTest(base_url=base_url):
+                with self.assertRaises(PublishError):
+                    plan_publish(metadata, "orvia-install", base_url)
