@@ -46,18 +46,25 @@ Orvia 当前已经有经过真机验证的 GitHub Actions + Zsign 签名链路�
 
 ### 发布工具
 
-发布工具使用 Python 标准库处理 IPA ZIP 和 Apple XML plist，使用精确固定版本 `wrangler@4.125.0` 的 `r2 object put --remote` 命令上传远程 R2 对象。采用标准库的原因是当前仓库没有应用运行时或依赖管理，Phase 1 不需要引入完整 Worker/API 框架。
+发布工具使用 Python 3.10+ 标准库处理 IPA ZIP 和 Apple XML plist，使用精确固定版本 `wrangler@4.125.0` 的 `r2 object put --remote` 命令上传远程 R2 对象。采用标准库的原因是当前仓库没有应用运行时或依赖管理，Phase 1 不需要引入完整 Worker/API 框架。
 
 工具提供一个可测试的纯函数边界：
 
 1. `inspect_ipa(path)`：读取并校验 IPA 元数据；
 2. `build_manifest(metadata, ipa_url)`：生成 XML plist 字节；
 3. `plan_publish(...)`：计算 task 路径、URL、Content-Type 和安装链接；
-4. CLI 执行计划中的两个 `npx --yes wrangler@4.125.0 r2 object put --remote` 远程 R2 上传命令，并输出不含敏感数据的 JSON 结果。
+4. CLI 接受可选 `--account-id`，执行计划中的两个 `npx --yes wrangler@4.125.0 r2 object put --remote` 远程 R2 上传命令，并输出不含敏感数据的 JSON 结果。
 
 真实上传只在用户明确配置好独立 bucket 和域名后执行；默认测试路径使用 `--dry-run`，不连接 Cloudflare。
 
-执行远程上传前必须已安装 Node.js、npm 和 npx，并预先完成 Wrangler 身份认证。命令使用 `--yes`，不允许出现安装确认提示。
+执行发布工具前必须已安装 Python 3.10+；执行远程上传前还必须已安装 Node.js、npm 和 npx，并预先完成 Wrangler 身份认证。非 dry-run 上传必须传入严格校验为 32 个十六进制字符的 `--account-id`，工具只将该非敏感值作为 `CLOUDFLARE_ACCOUNT_ID` 传给子进程，不接受 Cloudflare token/password。命令使用 `--yes`，不允许出现安装确认提示。Wrangler 系统要求见 https://developers.cloudflare.com/workers/wrangler/install-and-update/。
+
+CLI 形状如下；dry-run 不要求 `--account-id`，真实上传必须提供同一个已批准的 32-hex account ID：
+
+```text
+python tools/publish_ota.py --ipa Orvia-signed.ipa --bucket orvia-install --base-url https://orvia-install.ice329.me --dry-run
+python tools/publish_ota.py --ipa Orvia-signed.ipa --bucket orvia-install --base-url https://orvia-install.ice329.me --task-id <taskId> --account-id <32-hex-account-id>
+```
 
 ### R2 隔离
 
@@ -103,7 +110,7 @@ https://orvia-install.ice329.me/sign/{taskId}/manifest.plist
 itms-services://?action=download-manifest&url={encoded manifest URL}
 ```
 
-临时 manifest 文件在发布完成后删除。工具不接受证书字段，不写数据库，不把任何 P12/profile/password 写入 R2、日志或结果 JSON。
+临时 manifest 文件在发布完成后删除；远程上传从受控临时工作目录执行，并使用绝对 IPA/manifest 路径。工具不接受证书字段，不写数据库，不把任何 P12/profile/password、token 或 GitHub secret 写入 R2、日志或结果 JSON。
 
 ## 输出契约
 

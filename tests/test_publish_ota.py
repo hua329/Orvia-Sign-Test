@@ -16,6 +16,7 @@ from tools.publish_ota import IpaMetadata, PublishError, inspect_ipa
 
 
 FIXED_TASK_ID = "00000000-0000-4000-8000-000000000001"
+FIXED_ACCOUNT_ID = "0123456789abcdef0123456789abcdef"
 
 
 def make_ipa(tempdir, metadata, filename="fixture.ipa"):
@@ -123,6 +124,13 @@ class PublishOtaTests(unittest.TestCase):
             "https://orvia-install.ice329.me/sign/t/Orvia.ipa?x=1&y=2",
         )
 
+    def test_build_manifest_translates_control_character_serialization_error(self):
+        from tools.publish_ota import build_manifest
+
+        metadata = IpaMetadata("com.ice.orvia", "1\x00", None, "Payload/Orvia.app/Info.plist")
+        with self.assertRaisesRegex(PublishError, "manifest"):
+            build_manifest(metadata, "https://orvia-install.ice329.me/sign/t/Orvia.ipa")
+
     def test_upload_commands_set_content_types_and_task_keys(self):
         from tools.publish_ota import build_upload_commands, plan_publish
 
@@ -224,6 +232,7 @@ class PublishOtaTests(unittest.TestCase):
                         "--bucket", "orvia-install",
                         "--base-url", "https://orvia-install.ice329.me",
                         "--task-id", FIXED_TASK_ID,
+                        "--account-id", FIXED_ACCOUNT_ID,
                     ])
                 except OSError as exc:
                     self.fail(f"manifest write error escaped: {exc}")
@@ -253,6 +262,7 @@ class PublishOtaTests(unittest.TestCase):
                         "--bucket", "orvia-install",
                         "--base-url", "https://orvia-install.ice329.me",
                         "--task-id", FIXED_TASK_ID,
+                        "--account-id", FIXED_ACCOUNT_ID,
                     ])
                 except OSError as exc:
                     self.fail(f"manifest temp-directory error escaped: {exc}")
@@ -313,6 +323,7 @@ class PublishOtaTests(unittest.TestCase):
                 "--bucket", "orvia-install",
                 "--base-url", "https://orvia-install.ice329.me",
                 "--task-id", FIXED_TASK_ID,
+                "--account-id", FIXED_ACCOUNT_ID,
             ])
 
         self.assertEqual(result, 0)
@@ -323,6 +334,63 @@ class PublishOtaTests(unittest.TestCase):
         commands = [call.args[0] for call in run.call_args_list]
         self.assertTrue(commands[0][6].endswith("/Orvia.ipa"))
         self.assertTrue(commands[1][6].endswith("/manifest.plist"))
+        for call in run.call_args_list:
+            file_argument = next(argument for argument in call.args[0] if argument.startswith("--file="))
+            self.assertTrue(Path(file_argument.removeprefix("--file=")).is_absolute())
+            self.assertEqual(call.kwargs["stdin"], subprocess.DEVNULL)
+            upload_cwd = Path(call.kwargs["cwd"])
+            self.assertTrue(upload_cwd.is_absolute())
+            self.assertNotEqual(upload_cwd, Path.cwd())
+            self.assertFalse((upload_cwd / ".env").exists())
+        manifest_file = Path(next(argument for argument in commands[1] if argument.startswith("--file=")).removeprefix("--file="))
+        self.assertEqual(manifest_file.parent, Path(run.call_args_list[1].kwargs["cwd"]))
+
+    def test_cli_upload_requires_account_id_without_subprocess(self):
+        from tools.publish_ota import main
+
+        fixture = make_ipa(self.tempdir, {
+            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleVersion": "42",
+        })
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with patch("tools.publish_ota.subprocess.run") as run, redirect_stdout(stdout), redirect_stderr(stderr):
+            result = main([
+                "--ipa", str(fixture),
+                "--bucket", "orvia-install",
+                "--base-url", "https://orvia-install.ice329.me",
+                "--task-id", FIXED_TASK_ID,
+            ])
+
+        self.assertEqual(result, 1)
+        self.assertIn("account ID", stderr.getvalue())
+        self.assertEqual(stdout.getvalue(), "")
+        run.assert_not_called()
+
+    def test_cli_upload_rejects_invalid_account_id_without_subprocess(self):
+        from tools.publish_ota import main
+
+        fixture = make_ipa(self.tempdir, {
+            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleVersion": "42",
+        })
+        for account_id in ("g" * 32, "0" * 31, "0" * 33, "not-an-account-id"):
+            with self.subTest(account_id=account_id):
+                stdout = io.StringIO()
+                stderr = io.StringIO()
+                with patch("tools.publish_ota.subprocess.run") as run, redirect_stdout(stdout), redirect_stderr(stderr):
+                    result = main([
+                        "--ipa", str(fixture),
+                        "--bucket", "orvia-install",
+                        "--base-url", "https://orvia-install.ice329.me",
+                        "--task-id", FIXED_TASK_ID,
+                        "--account-id", account_id,
+                    ])
+
+                self.assertEqual(result, 1)
+                self.assertIn("account ID", stderr.getvalue())
+                self.assertEqual(stdout.getvalue(), "")
+                run.assert_not_called()
 
     def test_cli_upload_passes_only_allowlisted_environment(self):
         from tools.publish_ota import main
@@ -351,6 +419,7 @@ class PublishOtaTests(unittest.TestCase):
                 "--bucket", "orvia-install",
                 "--base-url", "https://orvia-install.ice329.me",
                 "--task-id", FIXED_TASK_ID,
+                "--account-id", FIXED_ACCOUNT_ID,
             ])
 
         self.assertEqual(result, 0)
@@ -358,6 +427,7 @@ class PublishOtaTests(unittest.TestCase):
         for call in run.call_args_list:
             environment = call.kwargs["env"]
             self.assertEqual(environment["PATH"], "sentinel-path")
+            self.assertEqual(environment["CLOUDFLARE_ACCOUNT_ID"], FIXED_ACCOUNT_ID)
             for forbidden in (
                 "GITHUB_TOKEN",
                 "P12_PASSWORD",
@@ -385,6 +455,7 @@ class PublishOtaTests(unittest.TestCase):
                 "--bucket", "orvia-install",
                 "--base-url", "https://orvia-install.ice329.me",
                 "--task-id", FIXED_TASK_ID,
+                "--account-id", FIXED_ACCOUNT_ID,
             ])
 
         self.assertEqual(result, 1)
@@ -557,6 +628,7 @@ class PublishOtaTests(unittest.TestCase):
                     "--bucket", "orvia-install",
                     "--base-url", "https://orvia-install.ice329.me",
                     "--task-id", FIXED_TASK_ID,
+                    "--account-id", FIXED_ACCOUNT_ID,
                 ])
 
         self.assertEqual(result, 1)

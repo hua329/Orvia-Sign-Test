@@ -6,7 +6,7 @@
 
 **Architecture:** Keep the repository as a static IPA plus existing workflow. Add one standard-library Python module with pure metadata/manifest/planning functions and a CLI wrapper around pinned `wrangler@4.125.0` R2 object uploads. Use one UUID task path per publish and reject unsafe public domains before any upload command is run.
 
-**Tech Stack:** Python 3 standard library (`zipfile`, `plistlib`, `urllib.parse`, `subprocess`, `unittest`), pinned `wrangler@4.125.0` CLI for remote R2 object uploads, Apple XML plist.
+**Tech Stack:** Python 3.10+ standard library (`zipfile`, `plistlib`, `urllib.parse`, `subprocess`, `unittest`), pinned `wrangler@4.125.0` CLI for remote R2 object uploads, Apple XML plist.
 
 ## Global Constraints
 
@@ -16,7 +16,7 @@
 - Use a new `orvia-install` R2 bucket and a separate download host; never use `downloads.ice329.me`, `ice329.me`, or `www.ice329.me`.
 - Every object key must be under `sign/{taskId}/`; do not publish a shared root `Orvia.ipa`.
 - Tests must not connect to Cloudflare or execute Wrangler.
-- Approved uploads require Node.js, npm, and npx to be installed and prior Wrangler authentication; `npx --yes` is mandatory so no package-installation prompt is allowed.
+- Approved uploads require Python 3.10+, Node.js, npm, and npx to be installed, prior Wrangler authentication, and a validated 32-hex-character Cloudflare account ID; `npx --yes` is mandatory so no package-installation prompt is allowed.
 - Before claiming completion, run the focused tests, the full test suite, dry-run output verification, and repository status checks.
 
 ## File Map
@@ -358,11 +358,11 @@ npx --yes wrangler@4.125.0 r2 object put {bucket}/{ipa_key} --remote --file={ipa
 npx --yes wrangler@4.125.0 r2 object put {bucket}/{manifest_key} --remote --file={manifest_path} --content-type=application/xml
 ```
 
-Use the exact `wrangler@4.125.0` package argument, `--yes`, and `--remote` for both remote R2 object uploads because Wrangler v4 defaults commands that support local/remote storage to local. Node.js/npm/npx and prior Wrangler authentication are prerequisites; `--yes` forbids an installation prompt. Use `str(Path)` for file arguments. No secret or user-provided command fragment may be passed through a shell.
+Use the exact `wrangler@4.125.0` package argument, `--yes`, and `--remote` for both remote R2 object uploads because Wrangler v4 defaults commands that support local/remote storage to local. Python 3.10+, Node.js/npm/npx, prior Wrangler authentication, and a validated 32-hex-character Cloudflare account ID are prerequisites; `--yes` forbids an installation prompt. Use absolute `str(Path)` file arguments. The CLI runs uploads from a controlled temporary working directory, passes `stdin=subprocess.DEVNULL`, and passes only the non-secret account ID as `CLOUDFLARE_ACCOUNT_ID` in its allowlisted child environment. No secret or user-provided command fragment may be passed through a shell.
 
 - [ ] **Step 2: Implement CLI argument parsing and temporary manifest cleanup**
 
-Require `--ipa`, `--bucket`, and `--base-url`; accept optional `--task-id` and `--dry-run`. Inspect the IPA, plan the publish, serialize the manifest into a `TemporaryDirectory`, and print JSON to stdout only after that temporary context exits successfully. In dry-run mode, print the JSON without calling `subprocess.run`. In upload mode, run the two `npx --yes wrangler@4.125.0` commands with `check=True`, capture output, pass only an allowlisted execution environment, convert command failures into `PublishError("R2 上传失败，请检查 wrangler@4.125.0 登录、bucket 和权限")`, and let the temporary directory clean itself up without an installation prompt.
+Require `--ipa`, `--bucket`, and `--base-url`; accept optional `--task-id`, `--account-id`, and `--dry-run`. When supplied, `--account-id` must be exactly 32 hexadecimal characters; non-dry-run upload mode requires it, while dry-run mode remains usable without it. Inspect the IPA, plan the publish, serialize the manifest into a `TemporaryDirectory`, and print JSON to stdout only after that temporary context exits successfully. In dry-run mode, print the JSON without calling `subprocess.run`. In upload mode, resolve absolute IPA/manifest paths, use the temporary directory as the controlled subprocess cwd, set stdin to `subprocess.DEVNULL`, run the two `npx --yes wrangler@4.125.0` commands with `check=True`, capture output, pass only an allowlisted execution environment plus `CLOUDFLARE_ACCOUNT_ID`, convert command failures into `PublishError("R2 上传失败，请检查 wrangler@4.125.0 登录、bucket 和权限")`, and let the temporary directory clean itself up without an installation prompt.
 
 - [ ] **Step 3: Run focused tests to verify they pass**
 

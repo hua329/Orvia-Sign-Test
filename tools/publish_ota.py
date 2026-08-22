@@ -41,12 +41,25 @@ def _is_windows() -> bool:
     return os.name == "nt"
 
 
-def _wrangler_environment() -> dict[str, str]:
-    return {
+def _wrangler_environment(account_id: str | None = None) -> dict[str, str]:
+    environment = {
         key: value
         for key in WRANGLER_ENVIRONMENT_KEYS
         if (value := os.environ.get(key)) is not None
     }
+    if account_id is not None:
+        environment["CLOUDFLARE_ACCOUNT_ID"] = account_id
+    return environment
+
+
+def _validate_account_id(account_id: str | None, *, required: bool) -> str | None:
+    if account_id is None:
+        if required:
+            raise PublishError("非 dry-run 上传必须提供 Cloudflare account ID")
+        return None
+    if len(account_id) != 32 or any(character not in "0123456789abcdefABCDEF" for character in account_id):
+        raise PublishError("Cloudflare account ID 必须为 32 位十六进制字符串")
+    return account_id
 
 
 @dataclass(frozen=True)
@@ -154,7 +167,10 @@ def build_manifest(metadata: IpaMetadata, ipa_url: str) -> bytes:
             },
         }]
     }
-    return plistlib.dumps(payload, fmt=plistlib.FMT_XML, sort_keys=False)
+    try:
+        return plistlib.dumps(payload, fmt=plistlib.FMT_XML, sort_keys=False)
+    except (ValueError, TypeError, UnicodeError) as exc:
+        raise PublishError("无法生成 OTA manifest") from exc
 
 
 def plan_publish(
@@ -343,13 +359,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--bucket", required=True)
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--task-id")
+    parser.add_argument("--account-id")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
     try:
-        ipa_path = Path(args.ipa)
+        ipa_path = Path(args.ipa).resolve()
         metadata = inspect_ipa(ipa_path)
         plan = plan_publish(metadata, args.bucket, args.base_url, args.task_id)
+        account_id = _validate_account_id(args.account_id, required=not args.dry_run)
 
         try:
             temporary_directory = tempfile.TemporaryDirectory()
@@ -365,7 +383,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     raise PublishError("无法写入 OTA manifest") from exc
 
                 if not args.dry_run:
-                    environment = _wrangler_environment()
+                    environment = _wrangler_environment(account_id)
                     try:
                         for command in build_upload_commands(plan, ipa_path, manifest_path):
                             subprocess.run(
@@ -373,6 +391,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                                 check=True,
                                 capture_output=True,
                                 env=environment,
+                                cwd=temporary_directory_path,
+                                stdin=subprocess.DEVNULL,
                             )
                     except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
                         raise PublishError(
