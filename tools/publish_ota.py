@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import plistlib
 import zipfile
+import zlib
 
 
 EXPECTED_BUNDLE_ID: str = "com.ice.orvia"
@@ -48,7 +49,7 @@ def inspect_ipa(path: Path) -> IpaMetadata:
             info_plist = matches[0]
             try:
                 plist_bytes = archive.read(info_plist)
-            except (KeyError, OSError, RuntimeError, zipfile.BadZipFile) as exc:
+            except (KeyError, OSError, RuntimeError, zipfile.BadZipFile, zlib.error) as exc:
                 raise PublishError("IPA 文件无效") from exc
     except PublishError:
         raise

@@ -1,4 +1,5 @@
 import plistlib
+import struct
 import tempfile
 import unittest
 import zipfile
@@ -47,4 +48,22 @@ class InspectIpaTests(unittest.TestCase):
     def test_inspect_ipa_rejects_missing_info_plist(self):
         ipa = make_ipa(self.tempdir, None)
         with self.assertRaisesRegex(PublishError, "Info.plist"):
+            inspect_ipa(ipa)
+
+    def test_inspect_ipa_rejects_corrupted_compressed_info_plist(self):
+        ipa = make_ipa(self.tempdir, {
+            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleVersion": "42",
+        })
+        with zipfile.ZipFile(ipa) as archive:
+            info = archive.getinfo("Payload/Orvia.app/Info.plist")
+            self.assertEqual(info.compress_type, zipfile.ZIP_DEFLATED)
+            with ipa.open("r+b") as handle:
+                handle.seek(info.header_offset + 26)
+                name_length, extra_length = struct.unpack("<HH", handle.read(4))
+                data_offset = info.header_offset + 30 + name_length + extra_length
+                handle.seek(data_offset)
+                handle.write(b"\x00" * info.compress_size)
+
+        with self.assertRaisesRegex(PublishError, "IPA 文件无效"):
             inspect_ipa(ipa)
