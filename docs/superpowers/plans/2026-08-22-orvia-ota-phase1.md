@@ -353,11 +353,11 @@ git -c user.name="Codex" -c user.email="codex@local" commit -m "test: define OTA
 Return exactly these two command shapes, using argument lists rather than shell interpolation:
 
 ```text
-npx wrangler r2 object put {bucket}/{ipa_key} --file={ipa_path} --content-type=application/octet-stream
-npx wrangler r2 object put {bucket}/{manifest_key} --file={manifest_path} --content-type=application/xml
+npx wrangler@4 r2 object put {bucket}/{ipa_key} --remote --file={ipa_path} --content-type=application/octet-stream
+npx wrangler@4 r2 object put {bucket}/{manifest_key} --remote --file={manifest_path} --content-type=application/xml
 ```
 
-Use `str(Path)` for file arguments. No secret or user-provided command fragment may be passed through a shell.
+Use the `wrangler@4` package argument and `--remote` for both R2 object uploads because Wrangler v4 defaults commands that support local/remote storage to local. Use `str(Path)` for file arguments. No secret or user-provided command fragment may be passed through a shell.
 
 - [ ] **Step 2: Implement CLI argument parsing and temporary manifest cleanup**
 

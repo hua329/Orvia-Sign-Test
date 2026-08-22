@@ -274,21 +274,23 @@ def build_upload_commands(
     return [
         [
             executable,
-            "wrangler",
+            "wrangler@4",
             "r2",
             "object",
             "put",
             f"{plan.bucket}/{plan.ipa_key}",
+            "--remote",
             f"--file={ipa_file}",
             f"--content-type={plan.ipa_content_type}",
         ],
         [
             executable,
-            "wrangler",
+            "wrangler@4",
             "r2",
             "object",
             "put",
             f"{plan.bucket}/{plan.manifest_key}",
+            "--remote",
             f"--file={manifest_file}",
             f"--content-type={plan.manifest_content_type}",
         ],
@@ -326,7 +328,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         with tempfile.TemporaryDirectory() as temporary_directory:
             manifest_path = Path(temporary_directory) / "manifest.plist"
-            manifest_path.write_bytes(build_manifest(metadata, plan.ipa_url))
+            try:
+                manifest_path.write_bytes(build_manifest(metadata, plan.ipa_url))
+            except OSError as exc:
+                raise PublishError("无法写入 OTA manifest") from exc
 
             if args.dry_run:
                 print(serialize_result(plan))
