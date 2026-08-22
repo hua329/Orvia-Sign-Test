@@ -171,6 +171,17 @@ def test_build_manifest_contains_ota_metadata(self):
     self.assertEqual(item["metadata"]["bundle-version"], "42")
     self.assertEqual(item["metadata"]["title"], "Orvia")
 
+def test_build_manifest_escapes_xml_url_values(self):
+    metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+
+    xml = build_manifest(metadata, "https://orvia-install.ice329.me/sign/t/Orvia.ipa?x=1&y=2")
+
+    self.assertIn(b"&amp;", xml)
+    self.assertEqual(
+        plistlib.loads(xml)["items"][0]["assets"][0]["url"],
+        "https://orvia-install.ice329.me/sign/t/Orvia.ipa?x=1&y=2",
+    )
+
 def test_plan_publish_isolates_task_and_builds_install_url(self):
     metadata = IpaMetadata("com.ice.orvia", "42", "1.4.2", "Payload/Orvia.app/Info.plist")
 
