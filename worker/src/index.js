@@ -123,6 +123,10 @@ async function statusResponse(taskId, env) {
 }
 
 async function signResponse(request, env) {
+  const signingEnabled = typeof env.ORVIA_SIGNING_ENABLED === "string"
+    && env.ORVIA_SIGNING_ENABLED.trim().toLowerCase() === "true";
+  if (!signingEnabled) return jsonResponse({ error: "Signing temporarily disabled" }, 503);
+
   const parsed = await parseSigningForm(request, env);
   if (!parsed.ok) return parsed.response;
 

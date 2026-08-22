@@ -32,6 +32,7 @@ function baseEnv(bucket = new MemoryBucket()) {
     GITHUB_REPO: "orvia-private",
     GITHUB_WORKFLOW: "sign.yml",
     GITHUB_TOKEN: "github-secret",
+    ORVIA_SIGNING_ENABLED: "true",
     GITHUB_FETCH: async () => new Response(null, { status: 204 }),
   };
 }
@@ -68,6 +69,28 @@ test("serves the Orvia signing page without exposing worker secrets", async () =
   assert.match(html, /\/api\/sign/);
   assert.doesNotMatch(html, /GITHUB_TOKEN/);
   assert.doesNotMatch(html, /p12_password/);
+});
+
+test("blocks new signing when the Orvia switch is explicitly disabled", async () => {
+  let dispatched = false;
+  const env = baseEnv();
+  env.ORVIA_SIGNING_ENABLED = "false";
+  env.GITHUB_FETCH = async () => {
+    dispatched = true;
+    return new Response(null, { status: 204 });
+  };
+  const response = await worker.fetch(signingRequest(), env);
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "Signing temporarily disabled" });
+  assert.equal(dispatched, false);
+});
+
+test("keeps new signing disabled when the switch is missing", async () => {
+  const env = baseEnv();
+  delete env.ORVIA_SIGNING_ENABLED;
+  const response = await worker.fetch(signingRequest(), env);
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "Signing temporarily disabled" });
 });
 
 test("queues an authenticated signing request and forwards only the workflow payload", async () => {

@@ -66,6 +66,7 @@ GET|HEAD /sign/{taskId}/icon.png
 ```powershell
 Push-Location worker
 pnpm.cmd dlx wrangler@4.125.0 secret put ORVIA_ACCESS_TOKEN
+pnpm.cmd dlx wrangler@4.125.0 secret put ORVIA_SIGNING_ENABLED
 pnpm.cmd dlx wrangler@4.125.0 secret put GITHUB_TOKEN
 pnpm.cmd dlx wrangler@4.125.0 secret put GITHUB_OWNER
 pnpm.cmd dlx wrangler@4.125.0 secret put GITHUB_REPO
@@ -76,6 +77,10 @@ Pop-Location
 推荐 `GITHUB_WORKFLOW` 使用 `sign.yml`，`GITHUB_REF` 不配置时默认为
 `main`。`ORVIA_ACCESS_TOKEN` 是测试者打开网站时填写的访问令牌；它不是
 GitHub token，也不会发送到浏览器脚本之外的页面内容。
+
+`ORVIA_SIGNING_ENABLED` 只接受两个操作值：输入 `true` 开启新签名任务，
+输入 `false` 关闭新签名任务。缺省或其他值也会保持关闭。关闭时网站和已有
+OTA 链接仍可访问，只是 `/api/sign` 返回 503；开启时仍然需要访问令牌。
 
 在 GitHub 私有仓库的 Settings → Secrets and variables → Actions 中，仅添加：
 
