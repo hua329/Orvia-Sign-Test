@@ -5,8 +5,10 @@ import worker, { resolveObjectPath } from "../src/index.js";
 const TASK_ID = "123e4567-e89b-12d3-a456-426614174000";
 const IPA_KEY = `sign/${TASK_ID}/Orvia.ipa`;
 const MANIFEST_KEY = `sign/${TASK_ID}/manifest.plist`;
+const ICON_KEY = `sign/${TASK_ID}/icon.png`;
 const IPA_BYTES = "ipa-bytes";
 const MANIFEST_BYTES = "manifest-bytes";
+const ICON_BYTES = "png-bytes";
 const IPA_ETAG = '"ipa-etag"';
 const MANIFEST_ETAG = '"manifest-etag"';
 const UPLOADED = new Date("2026-08-22T12:34:56.000Z");
@@ -56,6 +58,7 @@ function bucket() {
   return new MemoryBucket({
     [IPA_KEY]: r2Object(IPA_BYTES, "application/octet-stream", IPA_ETAG),
     [MANIFEST_KEY]: r2Object(MANIFEST_BYTES, "application/xml", MANIFEST_ETAG),
+    [ICON_KEY]: r2Object(ICON_BYTES, "image/png", '"icon-etag"'),
   });
 }
 
@@ -99,6 +102,17 @@ test("serves the task manifest", async () => {
   assert.deepEqual(store.headKeys, []);
 });
 
+test("serves the task icon", async () => {
+  const store = bucket();
+  const response = await worker.fetch(request(`/sign/${TASK_ID}/icon.png`), env(store));
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), ICON_BYTES);
+  assert.equal(response.headers.get("Content-Type"), "image/png");
+  assert.equal(response.headers.get("Cache-Control"), CACHE_CONTROL);
+  assert.deepEqual(store.getKeys, [ICON_KEY]);
+  assert.deepEqual(store.headKeys, []);
+});
+
 test("serves a manifest HEAD response from head without a body", async () => {
   const store = bucket();
   const response = await worker.fetch(
@@ -124,6 +138,10 @@ test("resolves the exact task object paths", async () => {
   assert.deepEqual(resolveObjectPath(`/sign/${TASK_ID}/manifest.plist`), {
     key: MANIFEST_KEY,
     contentType: "application/xml",
+  });
+  assert.deepEqual(resolveObjectPath(`/sign/${TASK_ID}/icon.png`), {
+    key: ICON_KEY,
+    contentType: "image/png",
   });
 });
 
