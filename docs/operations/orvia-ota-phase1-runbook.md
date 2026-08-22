@@ -22,6 +22,8 @@ following:
 - A separate download hostname, such as `orvia-install.ice329.me`, is configured
   for that bucket and serves HTTPS.
 - The bucket and hostname are isolated from the existing installation path.
+- Node.js, npm, and npx are installed and available on `PATH`.
+- Wrangler authentication has already been completed before any approved upload.
 
 Keep the following explicitly out of scope: `ice329.me`, `www.ice329.me`,
 `downloads.ice329.me`, old Workers, old D1, and old R2. Do not point the Phase 1
@@ -56,12 +58,14 @@ human approval, and after recording the dry-run `taskId`, run the command withou
 python tools/publish_ota.py --ipa Orvia-signed.ipa --bucket orvia-install --base-url https://orvia-install.ice329.me --task-id <taskId-from-dry-run>
 ```
 
-The approved upload path invokes the two argument-list commands with the exact
-pinned `wrangler@4.125.0` package and `--remote` on each remote `r2 object put`.
-Wrangler v4 defaults
+The approved upload path invokes the two argument-list commands as
+`npx --yes wrangler@4.125.0 r2 object put ... --remote`, using the exact pinned
+package and `--remote` on each remote `r2 object put`. Wrangler v4 defaults
 commands that can use local or remote storage to local, so `--remote` is required
 to target the account's R2 bucket. Do not remove `--remote` or substitute an
-unpinned Wrangler package for an approved upload.
+unpinned Wrangler package for an approved upload. Node.js/npm/npx and prior
+Wrangler authentication are required, and `--yes` means no installation prompt
+is allowed.
 
 Warning: this command performs the two R2 object uploads. It requires prior human
 approval and configuration, and it must not be run against an existing ice329

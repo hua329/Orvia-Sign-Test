@@ -16,6 +16,7 @@
 - Use a new `orvia-install` R2 bucket and a separate download host; never use `downloads.ice329.me`, `ice329.me`, or `www.ice329.me`.
 - Every object key must be under `sign/{taskId}/`; do not publish a shared root `Orvia.ipa`.
 - Tests must not connect to Cloudflare or execute Wrangler.
+- Approved uploads require Node.js, npm, and npx to be installed and prior Wrangler authentication; `npx --yes` is mandatory so no package-installation prompt is allowed.
 - Before claiming completion, run the focused tests, the full test suite, dry-run output verification, and repository status checks.
 
 ## File Map
@@ -353,15 +354,15 @@ git -c user.name="Codex" -c user.email="codex@local" commit -m "test: define OTA
 Return exactly these two command shapes, using argument lists rather than shell interpolation:
 
 ```text
-npx wrangler@4.125.0 r2 object put {bucket}/{ipa_key} --remote --file={ipa_path} --content-type=application/octet-stream
-npx wrangler@4.125.0 r2 object put {bucket}/{manifest_key} --remote --file={manifest_path} --content-type=application/xml
+npx --yes wrangler@4.125.0 r2 object put {bucket}/{ipa_key} --remote --file={ipa_path} --content-type=application/octet-stream
+npx --yes wrangler@4.125.0 r2 object put {bucket}/{manifest_key} --remote --file={manifest_path} --content-type=application/xml
 ```
 
-Use the exact `wrangler@4.125.0` package argument and `--remote` for both remote R2 object uploads because Wrangler v4 defaults commands that support local/remote storage to local. Use `str(Path)` for file arguments. No secret or user-provided command fragment may be passed through a shell.
+Use the exact `wrangler@4.125.0` package argument, `--yes`, and `--remote` for both remote R2 object uploads because Wrangler v4 defaults commands that support local/remote storage to local. Node.js/npm/npx and prior Wrangler authentication are prerequisites; `--yes` forbids an installation prompt. Use `str(Path)` for file arguments. No secret or user-provided command fragment may be passed through a shell.
 
 - [ ] **Step 2: Implement CLI argument parsing and temporary manifest cleanup**
 
-Require `--ipa`, `--bucket`, and `--base-url`; accept optional `--task-id` and `--dry-run`. Inspect the IPA, plan the publish, serialize the manifest into a `TemporaryDirectory`, and print JSON to stdout. In dry-run mode, print the JSON without calling `subprocess.run`. In upload mode, run the two `wrangler@4.125.0` commands with `check=True`, capture output, convert command failures into `PublishError("R2 上传失败，请检查 wrangler@4.125.0 登录、bucket 和权限")`, and let the temporary directory clean itself up.
+Require `--ipa`, `--bucket`, and `--base-url`; accept optional `--task-id` and `--dry-run`. Inspect the IPA, plan the publish, serialize the manifest into a `TemporaryDirectory`, and print JSON to stdout only after that temporary context exits successfully. In dry-run mode, print the JSON without calling `subprocess.run`. In upload mode, run the two `npx --yes wrangler@4.125.0` commands with `check=True`, capture output, pass only an allowlisted execution environment, convert command failures into `PublishError("R2 上传失败，请检查 wrangler@4.125.0 登录、bucket 和权限")`, and let the temporary directory clean itself up without an installation prompt.
 
 - [ ] **Step 3: Run focused tests to verify they pass**
 

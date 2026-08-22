@@ -53,9 +53,11 @@ Orvia 当前已经有经过真机验证的 GitHub Actions + Zsign 签名链路�
 1. `inspect_ipa(path)`：读取并校验 IPA 元数据；
 2. `build_manifest(metadata, ipa_url)`：生成 XML plist 字节；
 3. `plan_publish(...)`：计算 task 路径、URL、Content-Type 和安装链接；
-4. CLI 执行计划中的两个 `wrangler@4.125.0 r2 object put --remote` 远程 R2 上传命令，并输出不含敏感数据的 JSON 结果。
+4. CLI 执行计划中的两个 `npx --yes wrangler@4.125.0 r2 object put --remote` 远程 R2 上传命令，并输出不含敏感数据的 JSON 结果。
 
 真实上传只在用户明确配置好独立 bucket 和域名后执行；默认测试路径使用 `--dry-run`，不连接 Cloudflare。
+
+执行远程上传前必须已安装 Node.js、npm 和 npx，并预先完成 Wrangler 身份认证。命令使用 `--yes`，不允许出现安装确认提示。
 
 ### R2 隔离
 
@@ -91,9 +93,9 @@ bundle metadata + taskId
         |
         +--> build manifest.plist (temporary local file)
         |
-        +--> wrangler@4.125.0 r2 object put --remote .../Orvia.ipa
+        +--> npx --yes wrangler@4.125.0 r2 object put --remote .../Orvia.ipa
         |
-        +--> wrangler@4.125.0 r2 object put --remote .../manifest.plist
+        +--> npx --yes wrangler@4.125.0 r2 object put --remote .../manifest.plist
         v
 https://orvia-install.ice329.me/sign/{taskId}/manifest.plist
         |
@@ -130,7 +132,7 @@ itms-services://?action=download-manifest&url={encoded manifest URL}
 - Bundle ID 不是 `com.ice.orvia`：拒绝发布。
 - 版本字段同时缺失：拒绝发布。
 - 公共基址不是 HTTPS 或命中受保护域名：拒绝发布。
-- 任一 R2 上传失败：退出非零，并提示检查 `wrangler@4.125.0` 登录、bucket、域名和权限；不把完整命令输出给最终用户。
+- 任一 R2 上传失败：退出非零，并提示 `R2 上传失败，请检查 wrangler@4.125.0 登录、bucket 和权限`；不把完整命令输出给最终用户。
 - manifest 生成成功但第二次上传失败时，工具不自动删除第一份远端对象；runbook 记录 taskId，后续用 R2 生命周期或手工清理处理，避免误删其他任务。
 
 ## 测试与验收

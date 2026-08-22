@@ -10,7 +10,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from tools.publish_ota import IpaMetadata, PublishError, inspect_ipa
 
@@ -78,6 +78,20 @@ class InspectIpaTests(unittest.TestCase):
         with self.assertRaisesRegex(PublishError, "IPA 文件无效"):
             inspect_ipa(ipa)
 
+    def test_inspect_ipa_translates_unexpected_zip_errors(self):
+        ipa = make_ipa(self.tempdir, {
+            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleVersion": "42",
+        })
+        archive = MagicMock()
+        archive.__enter__.return_value = archive
+        archive.__exit__.return_value = False
+        archive.infolist.side_effect = RuntimeError("zip scan failed")
+
+        with patch("tools.publish_ota.zipfile.ZipFile", return_value=archive):
+            with self.assertRaisesRegex(PublishError, "IPA 文件无效"):
+                inspect_ipa(ipa)
+
 
 class PublishOtaTests(unittest.TestCase):
     def setUp(self):
@@ -119,8 +133,10 @@ class PublishOtaTests(unittest.TestCase):
         self.assertIn("orvia-install/" + plan.ipa_key, " ".join(commands[0]))
         self.assertIn("--file=signed.ipa", commands[0])
         self.assertIn("--file=manifest.plist", commands[1])
-        self.assertEqual(commands[0][1], "wrangler@4.125.0")
-        self.assertEqual(commands[1][1], "wrangler@4.125.0")
+        self.assertEqual(commands[0][1], "--yes")
+        self.assertEqual(commands[1][1], "--yes")
+        self.assertEqual(commands[0][2], "wrangler@4.125.0")
+        self.assertEqual(commands[1][2], "wrangler@4.125.0")
         self.assertIn("--remote", commands[0])
         self.assertIn("--remote", commands[1])
         self.assertIn("--content-type=application/octet-stream", commands[0])
@@ -242,6 +258,41 @@ class PublishOtaTests(unittest.TestCase):
                     self.fail(f"manifest temp-directory error escaped: {exc}")
 
         self.assertEqual(result, 1)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertIn("manifest", stderr.getvalue().lower())
+        run.assert_not_called()
+
+    def test_cli_manifest_tempdir_cleanup_failure_returns_publish_error_without_upload(self):
+        from tools.publish_ota import main
+
+        fixture = make_ipa(self.tempdir, {
+            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleVersion": "42",
+            "CFBundleShortVersionString": "1.4.2",
+        })
+        temporary_directory = MagicMock()
+        temporary_directory.__enter__.return_value = self.tempdir.name
+        temporary_directory.__exit__.side_effect = OSError("cleanup failed")
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with patch(
+            "tools.publish_ota.tempfile.TemporaryDirectory",
+            return_value=temporary_directory,
+        ), patch("tools.publish_ota.subprocess.run") as run:
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                try:
+                    result = main([
+                        "--ipa", str(fixture),
+                        "--bucket", "orvia-install",
+                        "--base-url", "https://orvia-install.ice329.me",
+                        "--task-id", FIXED_TASK_ID,
+                        "--dry-run",
+                    ])
+                except OSError as exc:
+                    self.fail(f"manifest temp-directory cleanup error escaped: {exc}")
+
+        self.assertEqual(result, 1)
+        self.assertEqual(stdout.getvalue(), "")
         self.assertIn("manifest", stderr.getvalue().lower())
         run.assert_not_called()
 
@@ -270,8 +321,50 @@ class PublishOtaTests(unittest.TestCase):
         self.assertEqual(stderr.getvalue(), "")
         self.assertEqual(run.call_count, 2)
         commands = [call.args[0] for call in run.call_args_list]
-        self.assertTrue(commands[0][5].endswith("/Orvia.ipa"))
-        self.assertTrue(commands[1][5].endswith("/manifest.plist"))
+        self.assertTrue(commands[0][6].endswith("/Orvia.ipa"))
+        self.assertTrue(commands[1][6].endswith("/manifest.plist"))
+
+    def test_cli_upload_passes_only_allowlisted_environment(self):
+        from tools.publish_ota import main
+
+        fixture = make_ipa(self.tempdir, {
+            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleVersion": "42",
+            "CFBundleShortVersionString": "1.4.2",
+        })
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with patch.dict(
+            "tools.publish_ota.os.environ",
+            {
+                "PATH": "sentinel-path",
+                "GITHUB_TOKEN": "github-secret",
+                "P12_PASSWORD": "p12-secret",
+                "PROFILE": "profile-secret",
+                "CLOUDFLARE_API_TOKEN": "cloudflare-secret",
+            },
+            clear=False,
+        ), patch("tools.publish_ota.subprocess.run") as run, redirect_stdout(stdout), redirect_stderr(stderr):
+            run.return_value = subprocess.CompletedProcess([], 0, stdout=b"", stderr=b"")
+            result = main([
+                "--ipa", str(fixture),
+                "--bucket", "orvia-install",
+                "--base-url", "https://orvia-install.ice329.me",
+                "--task-id", FIXED_TASK_ID,
+            ])
+
+        self.assertEqual(result, 0)
+        self.assertEqual(run.call_count, 2)
+        for call in run.call_args_list:
+            environment = call.kwargs["env"]
+            self.assertEqual(environment["PATH"], "sentinel-path")
+            for forbidden in (
+                "GITHUB_TOKEN",
+                "P12_PASSWORD",
+                "PROFILE",
+                "CLOUDFLARE_API_TOKEN",
+            ):
+                self.assertNotIn(forbidden, environment)
 
     def test_cli_upload_failure_reports_pinned_wrangler_error(self):
         from tools.publish_ota import main
@@ -349,6 +442,21 @@ class PublishOtaTests(unittest.TestCase):
             FIXED_TASK_ID.upper(),
         )
         self.assertEqual(plan.task_id, FIXED_TASK_ID)
+
+    def test_plan_publish_translates_quote_unicode_and_value_errors(self):
+        from tools.publish_ota import plan_publish
+
+        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        for failure in (UnicodeError("bad unicode"), ValueError("bad URL")):
+            with self.subTest(failure=type(failure).__name__):
+                with patch("tools.publish_ota.quote", side_effect=failure):
+                    with self.assertRaisesRegex(PublishError, "安装 URL"):
+                        plan_publish(
+                            metadata,
+                            "orvia-install",
+                            "https://orvia-install.ice329.me",
+                            FIXED_TASK_ID,
+                        )
 
     def test_plan_publish_rejects_existing_ice329_download_domains(self):
         from tools.publish_ota import plan_publish, PublishPlan

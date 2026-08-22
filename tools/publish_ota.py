@@ -19,6 +19,18 @@ PHASE_ONE_BUCKET: str = "orvia-install"
 IPA_CONTENT_TYPE: str = "application/octet-stream"
 MANIFEST_CONTENT_TYPE: str = "application/xml"
 WINDOWS_COMMAND_METACHARACTERS = frozenset('&|<>^()%!"')
+WRANGLER_ENVIRONMENT_KEYS = (
+    "PATH",
+    "PATHEXT",
+    "SystemRoot",
+    "ComSpec",
+    "TEMP",
+    "TMP",
+    "HOME",
+    "USERPROFILE",
+    "APPDATA",
+    "LOCALAPPDATA",
+)
 
 
 class PublishError(Exception):
@@ -27,6 +39,14 @@ class PublishError(Exception):
 
 def _is_windows() -> bool:
     return os.name == "nt"
+
+
+def _wrangler_environment() -> dict[str, str]:
+    return {
+        key: value
+        for key in WRANGLER_ENVIRONMENT_KEYS
+        if (value := os.environ.get(key)) is not None
+    }
 
 
 @dataclass(frozen=True)
@@ -86,7 +106,7 @@ def inspect_ipa(path: Path) -> IpaMetadata:
                 raise PublishError("IPA 文件无效") from exc
     except PublishError:
         raise
-    except (OSError, ValueError, zipfile.BadZipFile) as exc:
+    except Exception as exc:
         raise PublishError("IPA 文件无效") from exc
 
     try:
@@ -207,10 +227,13 @@ def plan_publish(
     manifest_key = f"sign/{task_id}/manifest.plist"
     ipa_url = f"{normalized_base_url}/{ipa_key}"
     manifest_url = f"{normalized_base_url}/{manifest_key}"
-    install_url = (
-        "itms-services://?action=download-manifest&url="
-        + quote(manifest_url, safe="")
-    )
+    try:
+        install_url = (
+            "itms-services://?action=download-manifest&url="
+            + quote(manifest_url, safe="")
+        )
+    except (UnicodeError, ValueError) as exc:
+        raise PublishError("安装 URL 无效") from exc
 
     return PublishPlan(
         task_id=task_id,
@@ -274,6 +297,7 @@ def build_upload_commands(
     return [
         [
             executable,
+            "--yes",
             "wrangler@4.125.0",
             "r2",
             "object",
@@ -285,6 +309,7 @@ def build_upload_commands(
         ],
         [
             executable,
+            "--yes",
             "wrangler@4.125.0",
             "r2",
             "object",
@@ -331,25 +356,33 @@ def main(argv: Sequence[str] | None = None) -> int:
         except OSError as exc:
             raise PublishError("无法创建 OTA manifest 临时目录") from exc
 
-        with temporary_directory as temporary_directory_path:
-            manifest_path = Path(temporary_directory_path) / "manifest.plist"
-            try:
-                manifest_path.write_bytes(build_manifest(metadata, plan.ipa_url))
-            except OSError as exc:
-                raise PublishError("无法写入 OTA manifest") from exc
+        try:
+            with temporary_directory as temporary_directory_path:
+                manifest_path = Path(temporary_directory_path) / "manifest.plist"
+                try:
+                    manifest_path.write_bytes(build_manifest(metadata, plan.ipa_url))
+                except OSError as exc:
+                    raise PublishError("无法写入 OTA manifest") from exc
 
-            if args.dry_run:
-                print(serialize_result(plan))
-                return 0
+                if not args.dry_run:
+                    environment = _wrangler_environment()
+                    try:
+                        for command in build_upload_commands(plan, ipa_path, manifest_path):
+                            subprocess.run(
+                                command,
+                                check=True,
+                                capture_output=True,
+                                env=environment,
+                            )
+                    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
+                        raise PublishError(
+                            "R2 上传失败，请检查 wrangler@4.125.0 登录、bucket 和权限"
+                        ) from exc
+                output = serialize_result(plan)
+        except OSError as exc:
+            raise PublishError("无法清理 OTA manifest 临时目录") from exc
 
-            try:
-                for command in build_upload_commands(plan, ipa_path, manifest_path):
-                    subprocess.run(command, check=True, capture_output=True)
-            except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
-                raise PublishError(
-                    "R2 上传失败，请检查 wrangler@4.125.0 登录、bucket 和权限"
-                ) from exc
-            print(serialize_result(plan))
+        print(output)
 
         return 0
     except PublishError as exc:
