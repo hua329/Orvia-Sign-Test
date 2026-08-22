@@ -3,12 +3,14 @@ import unittest
 
 
 WORKFLOW = Path(__file__).parents[1] / ".github" / "workflows" / "sign.yml"
+RUNBOOK = Path(__file__).parents[1] / "docs" / "operations" / "orvia-ota-phase2-runbook.md"
 
 
 class WorkflowContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.workflow = WORKFLOW.read_text(encoding="utf-8")
+        cls.runbook = RUNBOOK.read_text(encoding="utf-8")
 
     def test_accepts_task_id_and_keeps_lowercase_signing_contract(self):
         self.assertIn("task_id:", self.workflow)
@@ -38,6 +40,22 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertNotIn('echo "$P12_PASSWORD"', self.workflow)
         self.assertNotIn("cat cert.p12", self.workflow)
         self.assertNotIn("cat profile.mobileprovision", self.workflow)
+
+    def test_documents_only_orvia_secret_and_browser_acceptance_flow(self):
+        for value in [
+            "ORVIA_ACCESS_TOKEN",
+            "GITHUB_TOKEN",
+            "CLOUDFLARE_API_TOKEN",
+            "CLOUDFLARE_ACCOUNT_ID",
+            "https://beta.ice329.me/",
+            "/api/status/",
+            "wzautotool",
+            "wz-auto-updates",
+            "com.ice.orvia",
+        ]:
+            self.assertIn(value, self.runbook)
+        self.assertIn("pnpm.cmd dlx wrangler@4.125.0 secret put ORVIA_ACCESS_TOKEN", self.runbook)
+        self.assertIn("iPhone Safari", self.runbook)
 
 
 if __name__ == "__main__":

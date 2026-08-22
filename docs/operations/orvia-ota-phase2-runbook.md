@@ -1,259 +1,213 @@
-# Orvia OTA Phase 2 Operator Runbook
+# Orvia OTA Phase 2：网站签名与 iPhone 验收手册
 
-This runbook covers the Phase 2 handoff from local verification through separately
-approved Cloudflare deployment, upload, HTTP checks, and iPhone acceptance. The
-local checks are verification only. They do not upload to R2, deploy the Worker,
-change DNS or a certificate, or install an app on an iPhone.
+本手册只覆盖 Orvia 专用链路。当前测试阶段 Bundle ID 必须保持
+`com.ice.orvia`，不得切换为 `com.ice.Orvia`。
 
-## Phase 2 contract
+## 固定范围
 
-Keep these values exact throughout the handoff:
+只允许使用以下资源：
 
-| Item | Required value |
+| 项目 | 固定值 |
 | --- | --- |
-| App Bundle ID | `com.ice.orvia` |
-| R2 bucket | `orvia-beta` |
-| Worker public host | `beta.ice329.me` |
-| IPA object key | `sign/{taskId}/Orvia.ipa` |
-| Manifest object key | `sign/{taskId}/manifest.plist` |
-| IPA content type | `application/octet-stream` |
-| Manifest content type | `application/xml` |
+| Worker | `orvia-ota-worker` |
+| R2 | `orvia-beta` |
+| 公网域名 | `https://beta.ice329.me` |
+| 输入 IPA | `Orvia-unsigned.ipa` |
+| Bundle ID | `com.ice.orvia` |
 
-The publisher consumes an already signed `Orvia-signed.ipa` from the existing
-signing workflow. It validates that the IPA contains the lowercase
-`com.ice.orvia` Bundle ID before producing a publish plan. The Worker is a
-read-only object-serving boundary: it accepts only `GET` and `HEAD` requests for
-the two canonical task-scoped object paths and never performs browser upload,
-signing, or R2 writes.
+禁止读取、修改、重新部署、绑定或删除以下任何非 Orvia 资源：
 
-The recorded `taskId` is the recovery handle for the whole handoff. Use the same
-ID for the dry-run, approved upload, HTTP verification, iPhone acceptance record,
-and any partial-upload cleanup. Do not substitute a new ID after an upload
-failure.
+- `wzautotool`
+- `wz-auto-updates`
+- 其他 Worker、R2 bucket、route、DNS、Custom Domain 或 secret
 
-## Gate separation
+原有正式包 `Orvia.ipa` 不替换、不重签、不修改。网站只接受授权测试者的
+p12、mobileprovision 和密码；这些内容不会写入 R2、HTML、API 响应、日志或
+GitHub Summary。GitHub 仓库必须保持私有，因为 MVP 的 workflow inputs 可能
+出现在 GitHub 的事件元数据中。
 
-Run the local gate first. It is safe to repeat and must finish before any live
-Cloudflare action is considered. Deployment, custom-domain/DNS/certificate work,
-and R2 upload are a separate operator gate requiring explicit approval and the
-appropriate authenticated account.
+## 链路与接口
 
-## 1. Local-only verification
+```text
+测试者浏览器
+  -> beta.ice329.me/
+  -> POST /api/sign（访问令牌 + p12 + mobileprovision + 密码）
+  -> 私有 GitHub Actions + 原有 zsign 链路
+  -> R2 orvia-beta/sign/{taskId}/
+  -> GET /api/status/{taskId}
+  -> itms-services 安装链接
+```
 
-From the repository root, verify that Python 3.10 or newer, Node.js, npm, and npx
-are available. Then run the Worker checks from `worker/`:
+Worker 页面和 API：
+
+```text
+GET  /
+POST /api/sign
+GET  /api/status/{lowercase-uuid}
+GET|HEAD /sign/{taskId}/Orvia.ipa
+GET|HEAD /sign/{taskId}/manifest.plist
+GET|HEAD /sign/{taskId}/icon.png
+```
+
+签名请求返回：
+
+```json
+{"taskId":"<lowercase-uuid>","status":"queued"}
+```
+
+状态查询返回 queued、complete 或 failed。只有 complete 才会返回
+`installUrl`，浏览器也只在 complete 时显示安装按钮。
+
+## 1. 配置 Orvia Worker secrets
+
+下面命令会提示在本地输入值；不要把值写入命令、仓库、聊天或手册。只在
+`worker/` 目录、只对 `orvia-ota-worker` 执行：
 
 ```powershell
 Push-Location worker
-npm test
-npx --yes wrangler@4.125.0 deploy --dry-run
+pnpm.cmd dlx wrangler@4.125.0 secret put ORVIA_ACCESS_TOKEN
+pnpm.cmd dlx wrangler@4.125.0 secret put GITHUB_TOKEN
+pnpm.cmd dlx wrangler@4.125.0 secret put GITHUB_OWNER
+pnpm.cmd dlx wrangler@4.125.0 secret put GITHUB_REPO
+pnpm.cmd dlx wrangler@4.125.0 secret put GITHUB_WORKFLOW
 Pop-Location
 ```
 
-Run the existing Phase 1 publisher suite and Python compilation check from the
-repository root:
+推荐 `GITHUB_WORKFLOW` 使用 `sign.yml`，`GITHUB_REF` 不配置时默认为
+`main`。`ORVIA_ACCESS_TOKEN` 是测试者打开网站时填写的访问令牌；它不是
+GitHub token，也不会发送到浏览器脚本之外的页面内容。
+
+在 GitHub 私有仓库的 Settings → Secrets and variables → Actions 中，仅添加：
+
+```text
+CLOUDFLARE_API_TOKEN
+CLOUDFLARE_ACCOUNT_ID
+```
+
+这两个值只由 workflow 使用。p12、mobileprovision 和 p12 密码由测试者在
+网站提交，不要把它们预先放进 GitHub secrets。
+
+## 2. 本地验证（不产生线上变更）
+
+以下检查不会上传 R2、部署 Worker、修改 DNS/证书，也不会安装 iPhone 应用：
 
 ```powershell
+$node = 'C:\Users\花\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe'
+Push-Location worker
+& $node --test --test-force-exit --test-concurrency=1 test/site.test.js
+& $node --test --test-force-exit --test-concurrency=1 test/index.test.js
+& $node --test --test-force-exit --test-concurrency=1 test/signing.test.js
+Pop-Location
+
 python -B -m unittest discover -s tests -v
-python -B -m py_compile tools/publish_ota.py tests/test_publish_ota.py
+python -B -m py_compile tools/publish_ota.py tests/test_publish_ota.py tests/test_workflow_contract.py
+python -c "import yaml; from pathlib import Path; yaml.safe_load(Path('.github/workflows/sign.yml').read_text(encoding='utf-8')); print('workflow YAML parsed')"
 git diff --check
 ```
 
-Expected local results are a passing Node test run, Wrangler validation/bundling
-without deployment, `Ran 38 tests` followed by `OK` from the Python suite, no
-output and exit code 0 from `py_compile`, and no output from `git diff --check`.
-The local commands do not perform an R2 upload, Worker deployment, DNS change,
-certificate mutation, or iPhone installation.
+当前环境的 bundled Node v24.19 在 Windows 退出清理阶段偶发 teardown 错误，
+因此 Worker 测试按文件串行执行并使用官方 `--test-force-exit`；每个文件都
+必须以 0 退出且所有断言通过。这是测试运行器 workaround，不改变 Worker 行为。
 
-Environment note: if a bundled Node installation needs a serial test-runner
-workaround, this equivalent diagnostic command can be used:
+仅对 Orvia Worker 做 Wrangler dry-run：
 
 ```powershell
 Push-Location worker
-node --test --test-concurrency=1 test/index.test.js
+pnpm.cmd dlx wrangler@4.125.0 deploy --dry-run
 Pop-Location
 ```
 
-This is only an environment workaround. It does not replace `npm test`, which is
-the required package-script check.
+## 3. 部署 Orvia Worker
 
-## 2. Separately approved live preflight
-
-Before deployment or upload, an operator must record approval for the live action
-and confirm all of the following:
-
-- Wrangler is authenticated to the intended Cloudflare account. A read-only
-  identity check may be run from `worker/`:
-
-  ```powershell
-  Push-Location worker
-  npx --yes wrangler@4.125.0 whoami
-  Pop-Location
-  ```
-
-- The account already owns or controls the `ice329.me` zone.
-- The exact Phase 2 R2 bucket is `orvia-beta`. Create it if it does not exist;
-  do not select or substitute another bucket for this handoff.
-- `beta.ice329.me` is available for the Worker custom domain and the operator has
-  explicit approval for any Custom Domain, DNS, or certificate mutation needed to
-  make it serve HTTPS.
-- The signed input is `Orvia-signed.ipa` and its validated Bundle ID is
-  `com.ice.orvia`.
-- The 32-hex-character Cloudflare account ID needed by the approved publisher
-  upload has been obtained through the operator's normal secret-safe process.
-
-The only accepted public base URL for Phase 2 is
-`https://beta.ice329.me`. Treat the legacy root host `ice329.me`,
-`www.ice329.me`, `downloads.ice329.me`, and every other hostname as a hard stop;
-do not pass any of them to the publisher. Treat any bucket other than
-`orvia-beta` as a hard stop as well.
-
-No local check above authorizes this live gate. If the account, zone, bucket,
-custom-domain availability, certificate/DNS approval, or input Bundle ID cannot
-be confirmed, stop before deployment and upload.
-
-## 3. Approved Worker deployment
-
-After the live preflight is approved, deploy the Worker from `worker/` with the
-pinned Wrangler version:
+先确认 Wrangler 登录的是正确 Cloudflare 账号：
 
 ```powershell
 Push-Location worker
-npx --yes wrangler@4.125.0 deploy
+pnpm.cmd dlx wrangler@4.125.0 whoami
 Pop-Location
 ```
 
-This is a live Cloudflare action. It may deploy the Worker and apply the
-configured custom-domain/DNS/certificate state for `beta.ice329.me`; it must not
-be run as part of the local gate without the separate approval. Record the
-deployment result, Worker version, account, host, and timestamp.
-
-The deployed Worker remains read-only. It serves only the exact task-scoped keys
-below through the `OTA_BUCKET` binding to `orvia-beta`:
-
-```text
-sign/{taskId}/Orvia.ipa
-sign/{taskId}/manifest.plist
-```
-
-It does not expose an upload route and does not perform signing, browser upload,
-or automatic credential/profile handling.
-
-## 4. Approved task-scoped upload
-
-First create a dry-run plan from the repository root. This validates the signed
-IPA, generates the manifest, and prints the task-scoped URLs without uploading
-either object:
+确认后，只部署 `orvia-ota-worker`：
 
 ```powershell
-python tools/publish_ota.py --ipa Orvia.ipa --bucket orvia-beta --base-url https://beta.ice329.me --dry-run
+Push-Location worker
+pnpm.cmd dlx wrangler@4.125.0 deploy
+Pop-Location
 ```
 
-Save the JSON output and record its `taskId`, `ipaKey`, `manifestKey`,
-`ipaUrl`, `manifestUrl`, and `installUrl`. Confirm that the output contains
-`bundleIdentifier` equal to `com.ice.orvia`, the exact keys
-`sign/{taskId}/Orvia.ipa` and `sign/{taskId}/manifest.plist`, and HTTPS URLs on
-`beta.ice329.me`. Stop if any value differs. The dry-run performs no R2 upload
-and must be the source of the task ID used for every subsequent step.
+记录 Worker 版本、域名和时间。不要运行任何针对 `wzautotool`、
+`wz-auto-updates` 或其他资源的 Wrangler 命令。
 
-Only after the dry-run output and the upload have separate human approval, run
-the approved upload with the same recorded task ID and a 32-hex account ID:
+## 4. 浏览器签名测试
 
-```powershell
-python tools/publish_ota.py --ipa Orvia.ipa --bucket orvia-beta --base-url https://beta.ice329.me --task-id <taskId-from-dry-run> --account-id <32-hex-account-id>
-```
+1. 在浏览器打开 `https://beta.ice329.me/`。
+2. 输入 `ORVIA_ACCESS_TOKEN` 对应的访问令牌。
+3. 选择测试者自己的 p12 和匹配的 mobileprovision，填写 p12 密码。
+4. 提交后记录页面返回的 lowercase `taskId`，不要记录证书内容或密码。
+5. 页面会轮询 `/api/status/{taskId}`；queued 表示等待，complete 表示已发布，
+   failed 只显示安全的操作员错误。
+6. complete 后点击“在 iPhone 上安装”，或复制该任务的 `installUrl`。
 
-This command performs the two R2 object uploads. The publisher invokes the pinned
-`orvia-beta` bucket and applies `application/octet-stream` to the IPA and
-`application/xml` to the manifest. In environments without `npx`, use the
-equivalent pinned `pnpm.cmd dlx wrangler@4.125.0` commands from the recorded
-plan. Do not remove `--remote`, change the bucket, change the base URL, or rerun
-with a newly generated task ID.
+GitHub workflow 会：
 
-If the upload exits nonzero after starting, the first object may exist while the
-manifest does not. Keep the dry-run task ID, inspect only that task prefix, and
-either retry the approved upload with the same ID or perform the task-scoped
-cleanup described below. Do not infer a new task ID from a later command's
-output.
+- 使用仓库中的 `Orvia-unsigned.ipa`；
+- 保持原有 zsign 命令和 `-b com.ice.orvia`；
+- 使用 `tools/publish_ota.py` 校验签名包 Bundle ID；
+- 上传 `Orvia.ipa`、`manifest.plist`、`icon.png` 和 `result.json` 到同一任务前缀；
+- 失败时尽量写入安全的 `error.json`；
+- 在 `if: always()` 清理 p12、profile、签名 IPA、icon 和临时构建文件。
 
-## 5. HTTP verification
+## 5. HTTP 验收
 
-HTTP verification is a separate live gate. After the approved upload and before
-running either `curl.exe -I` command, record a separate approval for HTTP
-verification with the recorded task ID, upload result, and exact URLs. Approval
-for the R2 upload does not automatically authorize this stage. Only after that
-approval is recorded, check both objects through the exact Phase 2 HTTPS host.
-These commands issue `HEAD` requests, which the read-only Worker supports:
+对记录的同一个 `taskId` 检查：
 
 ```powershell
 curl.exe -I https://beta.ice329.me/sign/<taskId>/Orvia.ipa
 curl.exe -I https://beta.ice329.me/sign/<taskId>/manifest.plist
+curl.exe -I https://beta.ice329.me/sign/<taskId>/icon.png
 ```
 
-For both responses, require HTTPS and a successful `200` status. Require these
-content types exactly:
+必须全部通过 HTTPS 且返回 `200`。内容类型必须为：
 
-| URL path | Required `Content-Type` |
+| 路径 | Content-Type |
 | --- | --- |
-| `sign/{taskId}/Orvia.ipa` | `application/octet-stream` |
-| `sign/{taskId}/manifest.plist` | `application/xml` |
+| `Orvia.ipa` | `application/octet-stream` |
+| `manifest.plist` | `application/xml` |
+| `icon.png` | `image/png` |
 
-Stop if either URL redirects unexpectedly, is not HTTPS, returns anything other
-than `200`, is missing, or returns a different content type. Do not continue to
-iPhone acceptance until both task-scoped objects pass these checks.
+下载 manifest 后确认其中的 IPA URL 使用同一 `taskId`、主机为
+`beta.ice329.me`，并且包元数据是 `com.ice.orvia`。只检查该任务前缀，不能
+遍历或清理其他任务。
 
-## 6. iPhone Safari acceptance
+## 6. iPhone Safari 验收
 
-iPhone acceptance is a separate live gate. After HTTP verification has passed and
-before opening Safari, record a separate approval for iPhone acceptance with the
-recorded task ID and HTTP results. HTTP-verification approval or a passing HTTP
-check does not automatically authorize this stage. Then use the `installUrl`
-recorded from the approved publisher result:
+HTTP 检查通过后，在目标 iPhone 的 Safari 打开该任务的 `installUrl`：
 
-1. On the target iPhone, open the `installUrl` in Safari.
-2. Confirm that iOS presents the installation prompt for Orvia.
-3. Complete the installation and confirm that the installed app launches.
-4. Verify through the available device/package inspection that the installed
-   app's Bundle ID is exactly `com.ice.orvia`; do not treat the display name alone
-   as proof.
-5. Record the task ID, device identifier, iOS version, deployment/upload
-   timestamps, and the observed result.
+1. 确认出现 Orvia 安装提示。
+2. 完成安装并启动 App。
+3. 通过设备或包检查确认 Bundle ID 为 `com.ice.orvia`。
+4. 记录 task ID、iOS 版本、HTTP 结果和安装结果。
 
-This is a live acceptance step and is not performed by any local command. A
-successful HTTP check alone is not an iPhone acceptance result.
+仅 HTTP 200 不等于真机安装成功。不要在本阶段开始 `com.ice.Orvia` 切换。
 
-## 7. Task-scoped cleanup after a partial upload
+## 7. 任务级清理
 
-Cleanup is allowed only after an approved operator has confirmed the recorded
-task ID and the reason for cleanup. Delete only these two possible objects under
-the exact `orvia-beta` bucket and recorded task prefix:
+只有确认任务 ID 和清理原因后，才可在 `orvia-beta` 删除该任务前缀下的对象。
+使用同一个 task ID，不要删除整个 bucket：
 
-```text
-sign/{taskId}/Orvia.ipa
-sign/{taskId}/manifest.plist
+```powershell
+$taskId = '<已确认的 lowercase UUID>'
+Push-Location worker
+pnpm.cmd dlx wrangler@4.125.0 r2 object delete "orvia-beta/sign/$taskId/Orvia.ipa" --remote
+pnpm.cmd dlx wrangler@4.125.0 r2 object delete "orvia-beta/sign/$taskId/manifest.plist" --remote
+pnpm.cmd dlx wrangler@4.125.0 r2 object delete "orvia-beta/sign/$taskId/icon.png" --remote
+pnpm.cmd dlx wrangler@4.125.0 r2 object delete "orvia-beta/sign/$taskId/result.json" --remote
+pnpm.cmd dlx wrangler@4.125.0 r2 object delete "orvia-beta/sign/$taskId/error.json" --remote
+Pop-Location
 ```
 
-Do not delete another task prefix, the entire bucket, or any object outside this
-handoff. If a retry is approved, reuse the same `--task-id` so that cleanup and
-recovery remain bounded to the original task. No automatic lifecycle cleanup is
-assumed for this phase.
+## 安全边界
 
-## 8. Non-goals and safety boundaries
-
-The following remain outside Phase 2 and require a later, separately approved
-change:
-
-- p12 or provisioning-profile handling;
-- browser upload flows;
-- automatic signing or credential management;
-- lifecycle/retention cleanup;
-- changes to the existing signing workflow, website, backend, or legacy
-  Cloudflare resources;
-- migration of the Bundle ID to `com.ice.Orvia`.
-
-Never paste tokens, passwords, p12 contents, or profile contents into this
-runbook or a command. The account ID is a non-secret routing value but must still
-be checked as exactly 32 hexadecimal characters before the approved upload. Keep
-local verification, live Cloudflare mutation, R2 upload, HTTP verification, and
-iPhone acceptance as separate recorded gates; approval for one named stage does
-not automatically authorize the next stage.
+不要把 token、p12、mobileprovision、密码、签名 IPA 或设备标识符提交到仓库
+或发送到聊天。不要做匿名上传。不要改动原有签名链路、正式 uppercase IPA、
+Bundle ID 或任何非 Orvia Cloudflare 资源。
