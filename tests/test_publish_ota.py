@@ -470,6 +470,7 @@ class PublishOtaTests(unittest.TestCase):
                 "P12_PASSWORD": "p12-secret",
                 "PROFILE": "profile-secret",
                 "CLOUDFLARE_API_TOKEN": "cloudflare-secret",
+                "AWS_SECRET_ACCESS_KEY": "must-not-pass",
             },
             clear=False,
         ), patch("tools.publish_ota.subprocess.run") as run, redirect_stdout(stdout), redirect_stderr(stderr):
@@ -488,11 +489,12 @@ class PublishOtaTests(unittest.TestCase):
             environment = call.kwargs["env"]
             self.assertEqual(environment["PATH"], "sentinel-path")
             self.assertEqual(environment["CLOUDFLARE_ACCOUNT_ID"], FIXED_ACCOUNT_ID)
+            self.assertEqual(environment["CLOUDFLARE_API_TOKEN"], "cloudflare-secret")
             for forbidden in (
                 "GITHUB_TOKEN",
                 "P12_PASSWORD",
                 "PROFILE",
-                "CLOUDFLARE_API_TOKEN",
+                "AWS_SECRET_ACCESS_KEY",
             ):
                 self.assertNotIn(forbidden, environment)
 
