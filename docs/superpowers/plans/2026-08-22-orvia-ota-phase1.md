@@ -4,9 +4,9 @@
 
 **Goal:** Add a local-only, repeatable publisher that reads a signed IPA, generates an OTA manifest for `com.ice.orvia`, and prepares isolated R2 upload commands without changing the existing Zsign workflow.
 
-**Architecture:** Keep the repository as a static IPA plus existing workflow. Add one standard-library Python module with pure metadata/manifest/planning functions and a CLI wrapper around Wrangler R2 object uploads. Use one UUID task path per publish and reject unsafe public domains before any upload command is run.
+**Architecture:** Keep the repository as a static IPA plus existing workflow. Add one standard-library Python module with pure metadata/manifest/planning functions and a CLI wrapper around pinned `wrangler@4.125.0` R2 object uploads. Use one UUID task path per publish and reject unsafe public domains before any upload command is run.
 
-**Tech Stack:** Python 3 standard library (`zipfile`, `plistlib`, `urllib.parse`, `subprocess`, `unittest`), Wrangler CLI for R2 object uploads, Apple XML plist.
+**Tech Stack:** Python 3.10+ standard library (`zipfile`, `plistlib`, `urllib.parse`, `subprocess`, `unittest`), pinned `wrangler@4.125.0` CLI for remote R2 object uploads, Apple XML plist.
 
 ## Global Constraints
 
@@ -16,12 +16,14 @@
 - Use a new `orvia-install` R2 bucket and a separate download host; never use `downloads.ice329.me`, `ice329.me`, or `www.ice329.me`.
 - Every object key must be under `sign/{taskId}/`; do not publish a shared root `Orvia.ipa`.
 - Tests must not connect to Cloudflare or execute Wrangler.
+- Approved uploads require Python 3.10+, Node.js, npm, and npx to be installed, prior Wrangler authentication, and a validated 32-hex-character Cloudflare account ID; `npx --yes` is mandatory so no package-installation prompt is allowed.
+- Wrangler system requirements: https://developers.cloudflare.com/workers/wrangler/install-and-update/.
 - Before claiming completion, run the focused tests, the full test suite, dry-run output verification, and repository status checks.
 
 ## File Map
 
 - Create: `tools/__init__.py` — make the tools directory importable by the test runner.
-- Create: `tools/publish_ota.py` — IPA inspection, manifest serialization, safe publish planning, Wrangler command construction, and CLI.
+- Create: `tools/publish_ota.py` — IPA inspection, manifest serialization, safe publish planning, `wrangler@4.125.0` command construction, and CLI.
 - Create: `tests/__init__.py` — make the test package importable on Windows and in `unittest` discovery.
 - Create: `tests/test_publish_ota.py` — generated IPA fixtures and behavior tests for metadata, manifest, URL safety, task isolation, and dry-run planning.
 - Create: `docs/operations/orvia-ota-phase1-runbook.md` — preflight, non-destructive dry-run, R2 upload procedure, HTTP checks, and iPhone Safari acceptance steps.
@@ -171,6 +173,17 @@ def test_build_manifest_contains_ota_metadata(self):
     self.assertEqual(item["metadata"]["bundle-version"], "42")
     self.assertEqual(item["metadata"]["title"], "Orvia")
 
+def test_build_manifest_escapes_xml_url_values(self):
+    metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+
+    xml = build_manifest(metadata, "https://orvia-install.ice329.me/sign/t/Orvia.ipa?x=1&y=2")
+
+    self.assertIn(b"&amp;", xml)
+    self.assertEqual(
+        plistlib.loads(xml)["items"][0]["assets"][0]["url"],
+        "https://orvia-install.ice329.me/sign/t/Orvia.ipa?x=1&y=2",
+    )
+
 def test_plan_publish_isolates_task_and_builds_install_url(self):
     metadata = IpaMetadata("com.ice.orvia", "42", "1.4.2", "Payload/Orvia.app/Info.plist")
 
@@ -223,7 +236,7 @@ git -c user.name="Codex" -c user.email="codex@local" commit -m "test: define OTA
 - Test: `tests/test_publish_ota.py`
 
 **Interfaces:**
-- `@dataclass(frozen=True) class PublishPlan` with `task_id`, `bundle_identifier`, `bundle_version`, `bundle_short_version`, `ipa_key`, `manifest_key`, `ipa_url`, `manifest_url`, `install_url`, `ipa_content_type`, and `manifest_content_type`.
+- `@dataclass(frozen=True) class PublishPlan` with `task_id`, `bucket`, `bundle_identifier`, `bundle_version`, `bundle_short_version`, `ipa_key`, `manifest_key`, `ipa_url`, `manifest_url`, `install_url`, `ipa_content_type`, and `manifest_content_type`.
 - `def build_manifest(metadata: IpaMetadata, ipa_url: str) -> bytes` returns Apple XML plist bytes.
 - `def plan_publish(metadata: IpaMetadata, bucket: str, base_url: str, task_id: str | None = None) -> PublishPlan`.
 
@@ -326,7 +339,7 @@ git add tests/test_publish_ota.py
 git -c user.name="Codex" -c user.email="codex@local" commit -m "test: define OTA dry-run and upload command contract"
 ```
 
-### Task 6: Implement Wrangler upload planning and CLI dry-run
+### Task 6: Implement pinned `wrangler@4.125.0` upload planning and CLI dry-run
 
 **Files:**
 - Modify: `tools/publish_ota.py`
@@ -342,15 +355,15 @@ git -c user.name="Codex" -c user.email="codex@local" commit -m "test: define OTA
 Return exactly these two command shapes, using argument lists rather than shell interpolation:
 
 ```text
-npx wrangler r2 object put {bucket}/{ipa_key} --file={ipa_path} --content-type=application/octet-stream
-npx wrangler r2 object put {bucket}/{manifest_key} --file={manifest_path} --content-type=application/xml
+npx --yes wrangler@4.125.0 r2 object put {bucket}/{ipa_key} --remote --file={ipa_path} --content-type=application/octet-stream
+npx --yes wrangler@4.125.0 r2 object put {bucket}/{manifest_key} --remote --file={manifest_path} --content-type=application/xml
 ```
 
-Use `str(Path)` for file arguments. No secret or user-provided command fragment may be passed through a shell.
+Use the exact `wrangler@4.125.0` package argument, `--yes`, and `--remote` for both remote R2 object uploads because Wrangler v4 defaults commands that support local/remote storage to local. Python 3.10+, Node.js/npm/npx, prior Wrangler authentication, and a validated 32-hex-character Cloudflare account ID are prerequisites; `--yes` forbids an installation prompt. Use absolute `str(Path)` file arguments. The CLI runs uploads from a controlled temporary working directory, passes `stdin=subprocess.DEVNULL`, and passes only the non-secret account ID as `CLOUDFLARE_ACCOUNT_ID` in its allowlisted child environment. No secret or user-provided command fragment may be passed through a shell.
 
 - [ ] **Step 2: Implement CLI argument parsing and temporary manifest cleanup**
 
-Require `--ipa`, `--bucket`, and `--base-url`; accept optional `--task-id` and `--dry-run`. Inspect the IPA, plan the publish, serialize the manifest into a `TemporaryDirectory`, and print JSON to stdout. In dry-run mode, print the JSON without calling `subprocess.run`. In upload mode, run the two commands with `check=True`, capture output, convert command failures into `PublishError("R2 上传失败，请检查 Wrangler 登录、bucket 和权限")`, and let the temporary directory clean itself up.
+Require `--ipa`, `--bucket`, and `--base-url`; accept optional `--task-id`, `--account-id`, and `--dry-run`, but require an explicit `--task-id` for non-dry-run uploads so both objects remain under the approved task. When supplied, `--account-id` must be exactly 32 hexadecimal characters; non-dry-run upload mode requires it, while dry-run mode remains usable without it and may generate a UUID. Inspect the IPA, plan the publish, serialize the manifest into a `TemporaryDirectory`, and print JSON to stdout only after that temporary context exits successfully. In dry-run mode, print the JSON without calling `subprocess.run`. In upload mode, resolve absolute IPA/manifest paths, use the temporary directory as the controlled subprocess cwd, set stdin to `subprocess.DEVNULL`, run the two `npx --yes wrangler@4.125.0` commands with `check=True`, capture output, pass only an allowlisted execution environment plus `CLOUDFLARE_ACCOUNT_ID`, convert command failures into `PublishError("R2 上传失败，请检查 wrangler@4.125.0 登录、bucket 和权限")`, and let the temporary directory clean itself up without an installation prompt.
 
 - [ ] **Step 3: Run focused tests to verify they pass**
 
@@ -360,17 +373,17 @@ Run:
 python -m unittest tests.test_publish_ota -v
 ```
 
-Expected: all tests PASS, including the subprocess-based dry-run test; no Wrangler process is started because the CLI receives `--dry-run`.
+Expected: all tests PASS, including the subprocess-based dry-run test; no `wrangler@4.125.0` process is started because the CLI receives `--dry-run`.
 
 - [ ] **Step 4: Run a manual dry-run against the repository IPA**
 
 Run:
 
 ```powershell
-python tools/publish_ota.py --ipa Orvia.ipa --bucket orvia-install --base-url https://orvia-install.ice329.me --dry-run
+python tools/publish_ota.py --ipa Orvia-signed.ipa --bucket orvia-install --base-url https://orvia-install.ice329.me --dry-run
 ```
 
-Expected: valid JSON with `bundleIdentifier` equal to `com.ice.orvia`, task-scoped `ipaUrl` and `manifestUrl`, and an `itms-services://` `installUrl`.
+Expected: valid JSON with `bundleIdentifier` equal to `com.ice.orvia`, task-scoped `ipaUrl` and `manifestUrl`, and an `itms-services://` `installUrl`. The publisher must receive the signed output from the existing workflow; the repository's unsigned `Orvia.ipa` may contain the deferred uppercase Bundle ID and must be rejected during Phase 1.
 
 - [ ] **Step 5: Commit the green CLI implementation**
 
@@ -442,7 +455,7 @@ Run:
 python -m unittest discover -s tests -v
 ```
 
-Expected: all tests PASS with no test invoking Wrangler or making network requests.
+Expected: all tests PASS with no test invoking `wrangler@4.125.0` or making network requests.
 
 - [ ] **Step 2: Run type/syntax checks available in the repository**
 
@@ -459,8 +472,8 @@ Expected: exit code 0 and no generated bytecode files committed.
 Run:
 
 ```powershell
-python tools/publish_ota.py --ipa Orvia.ipa --bucket orvia-install --base-url https://orvia-install.ice329.me --dry-run
-git diff HEAD~7 -- .github/workflows/sign.yml Orvia.ipa
+python tools/publish_ota.py --ipa Orvia-signed.ipa --bucket orvia-install --base-url https://orvia-install.ice329.me --dry-run
+git diff 9fd36ab -- .github/workflows/sign.yml Orvia.ipa
 git status --short
 ```
 
