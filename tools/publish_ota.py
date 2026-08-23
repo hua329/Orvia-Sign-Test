@@ -14,7 +14,7 @@ import zipfile
 import zlib
 
 
-EXPECTED_BUNDLE_ID: str = "com.ice.orvia"
+EXPECTED_BUNDLE_ID: str = "com.ice.Orvia"
 PHASE_ONE_BUCKET: str = "orvia-install"
 PHASE_TWO_BUCKET: str = "orvia-beta"
 ALLOWED_BUCKETS = frozenset({PHASE_ONE_BUCKET, PHASE_TWO_BUCKET})
