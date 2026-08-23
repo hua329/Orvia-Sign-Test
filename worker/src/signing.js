@@ -118,7 +118,8 @@ export async function dispatchSigningWorkflow(env, payload, fetchImpl = globalTh
   } catch {
     throw new Error("GitHub workflow dispatch failed");
   }
-  if (response.status !== 204) {
+  if (response.status !== 200 && response.status !== 204) {
+    console.error("GitHub dispatch failed with status", response.status);
     throw new Error("GitHub workflow dispatch failed");
   }
 }

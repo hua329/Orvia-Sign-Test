@@ -76,6 +76,17 @@ test("dispatches the fixed workflow with the task id and exact inputs", async ()
   assert.equal(body.inputs.p12_password, "test-password");
 });
 
+test("accepts GitHub's successful workflow dispatch response", async () => {
+  await assert.doesNotReject(
+    dispatchSigningWorkflow(ENV, {
+      taskId: TASK_ID,
+      p12Base64: "cDEy",
+      profileBase64: "cHJvZmlsZQ==",
+      p12Password: "test-password",
+    }, async () => new Response(JSON.stringify({ workflow_run_id: 1 }), { status: 200 })),
+  );
+});
+
 test("turns non-204 GitHub dispatch into a generic error", async () => {
   await assert.rejects(
     dispatchSigningWorkflow(ENV, {
