@@ -95,8 +95,9 @@ jobs:
       - name: Publish OTA files
         env:
           TASK_ID: ${{ inputs.task_id }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           set -euo pipefail
           python tools/publish_ota.py \
@@ -121,14 +122,14 @@ jobs:
               raise SystemExit("Published result does not match the Orvia task contract")
           PY
 
-          npx --yes wrangler@4.125.0 r2 object put "orvia-beta/sign/$TASK_ID/icon.png" \
-            --remote \
-            --file=icon.png \
-            --content-type=image/png
-          npx --yes wrangler@4.125.0 r2 object put "orvia-beta/sign/$TASK_ID/result.json" \
-            --remote \
-            --file=publish-result.json \
-            --content-type=application/json
+          aws s3 cp icon.png "s3://orvia-beta/sign/$TASK_ID/icon.png" \
+            --endpoint-url "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com" \
+            --content-type image/png \
+            --no-progress
+          aws s3 cp publish-result.json "s3://orvia-beta/sign/$TASK_ID/result.json" \
+            --endpoint-url "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com" \
+            --content-type application/json \
+            --no-progress
 
           INSTALL_URL=$(python -c 'import json; print(json.load(open("publish-result.json", encoding="utf-8"))["installUrl"])')
           {
@@ -143,18 +144,19 @@ jobs:
         continue-on-error: true
         env:
           TASK_ID: ${{ inputs.task_id }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
           set -euo pipefail
           if [[ ! "$TASK_ID" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
             exit 0
           fi
           printf '{"taskId":"%s","status":"failed","message":"Signing task failed"}\n' "$TASK_ID" > error.json
-          npx --yes wrangler@4.125.0 r2 object put "orvia-beta/sign/$TASK_ID/error.json" \
-            --remote \
-            --file=error.json \
-            --content-type=application/json
+          aws s3 cp error.json "s3://orvia-beta/sign/$TASK_ID/error.json" \
+            --endpoint-url "https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com" \
+            --content-type application/json \
+            --no-progress
 
       - name: Cleanup
         if: always()

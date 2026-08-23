@@ -155,16 +155,20 @@ class PublishOtaTests(unittest.TestCase):
         commands = build_upload_commands(plan, Path("signed.ipa"), Path("manifest.plist"))
         self.assertEqual(len(commands), 2)
         self.assertIn("orvia-install/" + plan.ipa_key, " ".join(commands[0]))
-        self.assertIn("--file=signed.ipa", commands[0])
-        self.assertIn("--file=manifest.plist", commands[1])
-        self.assertEqual(commands[0][1], "--yes")
-        self.assertEqual(commands[1][1], "--yes")
-        self.assertEqual(commands[0][2], "wrangler@4.125.0")
-        self.assertEqual(commands[1][2], "wrangler@4.125.0")
-        self.assertIn("--remote", commands[0])
-        self.assertIn("--remote", commands[1])
-        self.assertIn("--content-type=application/octet-stream", commands[0])
-        self.assertIn("--content-type=application/xml", commands[1])
+        self.assertEqual(commands[0][3], "signed.ipa")
+        self.assertEqual(commands[1][3], "manifest.plist")
+        self.assertEqual(commands[0][1:3], ["s3", "cp"])
+        self.assertEqual(commands[1][1:3], ["s3", "cp"])
+        self.assertIn("s3://orvia-install/" + plan.ipa_key, commands[0])
+        self.assertIn("s3://orvia-install/" + plan.manifest_key, commands[1])
+        self.assertIn("--endpoint-url", commands[0])
+        self.assertIn("--endpoint-url", commands[1])
+        self.assertIn("--content-type", commands[0])
+        self.assertIn("application/octet-stream", commands[0])
+        self.assertIn("--content-type", commands[1])
+        self.assertIn("application/xml", commands[1])
+        self.assertIn("--no-progress", commands[0])
+        self.assertIn("--no-progress", commands[1])
         joined = " ".join(" ".join(command) for command in commands)
         for forbidden in ("p12", "mobileprovision", "password", "token"):
             self.assertNotIn(forbidden, joined.lower())
@@ -176,8 +180,8 @@ class PublishOtaTests(unittest.TestCase):
         plan = plan_publish(metadata, "orvia-install", "https://orvia-install.ice329.me", FIXED_TASK_ID)
         with patch("tools.publish_ota._is_windows", return_value=False):
             commands = build_upload_commands(plan, Path("signed.ipa"), Path("manifest.plist"))
-        self.assertEqual(commands[0][0], "npx")
-        self.assertEqual(commands[1][0], "npx")
+        self.assertEqual(commands[0][0], "aws")
+        self.assertEqual(commands[1][0], "aws")
 
     def test_upload_commands_reject_malformed_plan_before_command_construction(self):
         from tools.publish_ota import build_upload_commands, plan_publish
@@ -348,17 +352,17 @@ class PublishOtaTests(unittest.TestCase):
         self.assertEqual(stderr.getvalue(), "")
         self.assertEqual(run.call_count, 2)
         commands = [call.args[0] for call in run.call_args_list]
-        self.assertTrue(commands[0][6].endswith("/Orvia.ipa"))
-        self.assertTrue(commands[1][6].endswith("/manifest.plist"))
+        self.assertTrue(next(argument for argument in commands[0] if argument.startswith("s3://")).endswith("/Orvia.ipa"))
+        self.assertTrue(next(argument for argument in commands[1] if argument.startswith("s3://")).endswith("/manifest.plist"))
         for call in run.call_args_list:
-            file_argument = next(argument for argument in call.args[0] if argument.startswith("--file="))
-            self.assertTrue(Path(file_argument.removeprefix("--file=")).is_absolute())
+            file_argument = call.args[0][3]
+            self.assertTrue(Path(file_argument).is_absolute())
             self.assertEqual(call.kwargs["stdin"], subprocess.DEVNULL)
             upload_cwd = Path(call.kwargs["cwd"])
             self.assertTrue(upload_cwd.is_absolute())
             self.assertNotEqual(upload_cwd, Path.cwd())
             self.assertFalse((upload_cwd / ".env").exists())
-        manifest_file = Path(next(argument for argument in commands[1] if argument.startswith("--file=")).removeprefix("--file="))
+        manifest_file = Path(commands[1][3])
         self.assertEqual(manifest_file.parent, Path(run.call_args_list[1].kwargs["cwd"]))
 
     def test_cli_upload_requires_explicit_task_id_without_temp_or_subprocess(self):
@@ -469,8 +473,8 @@ class PublishOtaTests(unittest.TestCase):
                 "GITHUB_TOKEN": "github-secret",
                 "P12_PASSWORD": "p12-secret",
                 "PROFILE": "profile-secret",
-                "CLOUDFLARE_API_TOKEN": "cloudflare-secret",
-                "AWS_SECRET_ACCESS_KEY": "must-not-pass",
+                "AWS_ACCESS_KEY_ID": "r2-access-key",
+                "AWS_SECRET_ACCESS_KEY": "r2-secret-key",
             },
             clear=False,
         ), patch("tools.publish_ota.subprocess.run") as run, redirect_stdout(stdout), redirect_stderr(stderr):
@@ -488,17 +492,20 @@ class PublishOtaTests(unittest.TestCase):
         for call in run.call_args_list:
             environment = call.kwargs["env"]
             self.assertEqual(environment["PATH"], "sentinel-path")
-            self.assertEqual(environment["CLOUDFLARE_ACCOUNT_ID"], FIXED_ACCOUNT_ID)
-            self.assertEqual(environment["CLOUDFLARE_API_TOKEN"], "cloudflare-secret")
+            self.assertEqual(environment["AWS_ENDPOINT_URL"], f"https://{FIXED_ACCOUNT_ID}.r2.cloudflarestorage.com")
+            self.assertEqual(environment["AWS_ACCESS_KEY_ID"], "r2-access-key")
+            self.assertEqual(environment["AWS_SECRET_ACCESS_KEY"], "r2-secret-key")
+            self.assertEqual(environment["AWS_DEFAULT_REGION"], "auto")
+            self.assertEqual(environment["AWS_EC2_METADATA_DISABLED"], "true")
             for forbidden in (
                 "GITHUB_TOKEN",
                 "P12_PASSWORD",
                 "PROFILE",
-                "AWS_SECRET_ACCESS_KEY",
+                "CLOUDFLARE_API_TOKEN",
             ):
                 self.assertNotIn(forbidden, environment)
 
-    def test_cli_upload_failure_reports_pinned_wrangler_error(self):
+    def test_cli_upload_failure_reports_r2_s3_error(self):
         from tools.publish_ota import main
 
         fixture = make_ipa(self.tempdir, {
@@ -523,7 +530,7 @@ class PublishOtaTests(unittest.TestCase):
         self.assertEqual(result, 1)
         self.assertEqual(
             stderr.getvalue().strip(),
-            "R2 上传失败，请检查 wrangler@4.125.0 登录、bucket 和权限",
+            "R2 上传失败，请检查 R2 S3 Access Key、Secret Access Key、endpoint、bucket 和权限",
         )
         run.assert_called_once()
 

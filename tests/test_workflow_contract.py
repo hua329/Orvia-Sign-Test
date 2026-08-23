@@ -28,12 +28,16 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertIn("sign/$TASK_ID/icon.png", self.workflow)
         self.assertIn("sign/$TASK_ID/result.json", self.workflow)
         self.assertIn("sign/$TASK_ID/error.json", self.workflow)
-        self.assertIn("--content-type=image/png", self.workflow)
-        self.assertIn("--content-type=application/json", self.workflow)
+        self.assertIn("--content-type image/png", self.workflow)
+        self.assertIn("--content-type application/json", self.workflow)
 
     def test_uses_cloudflare_secrets_without_printing_signing_inputs(self):
-        self.assertIn("CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}", self.workflow)
         self.assertIn("CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}", self.workflow)
+        self.assertIn("AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}", self.workflow)
+        self.assertIn("AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}", self.workflow)
+        self.assertIn("aws s3 cp", self.workflow)
+        self.assertIn("r2.cloudflarestorage.com", self.workflow)
+        self.assertNotIn("CLOUDFLARE_API_TOKEN", self.workflow)
         self.assertIn("GITHUB_STEP_SUMMARY", self.workflow)
         self.assertIn("if: always()", self.workflow)
         self.assertIn("rm -f cert.p12 profile.mobileprovision Orvia-signed.ipa icon.png publish-result.json", self.workflow)
@@ -44,8 +48,9 @@ class WorkflowContractTests(unittest.TestCase):
     def test_documents_only_orvia_secret_and_browser_acceptance_flow(self):
         for value in [
             "GITHUB_TOKEN",
-            "CLOUDFLARE_API_TOKEN",
             "CLOUDFLARE_ACCOUNT_ID",
+            "R2_ACCESS_KEY_ID",
+            "R2_SECRET_ACCESS_KEY",
             "https://beta.ice329.me/",
             "https://admin.ice329.me/",
             "Orvia OTA",

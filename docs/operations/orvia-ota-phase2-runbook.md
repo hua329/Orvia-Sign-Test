@@ -80,15 +80,19 @@ Pop-Location
 p12、mobileprovision 和 p12 密码，不再要求访问令牌。开关关闭是唯一的签名
 入口控制；开启期间，任何拿到 `beta.ice329.me` 链接的人都可以提交签名任务。
 
-在 GitHub 私有仓库的 Settings → Secrets and variables → Actions 中，仅添加：
+在 GitHub 私有仓库的 Settings → Secrets and variables → Actions 中，添加：
 
 ```text
-CLOUDFLARE_API_TOKEN
 CLOUDFLARE_ACCOUNT_ID
+R2_ACCESS_KEY_ID
+R2_SECRET_ACCESS_KEY
 ```
 
-这两个值只由 workflow 使用。p12、mobileprovision 和 p12 密码由测试者在
-网站提交，不要把它们预先放进 GitHub secrets。
+其中 `R2_ACCESS_KEY_ID` 和 `R2_SECRET_ACCESS_KEY` 来自 R2 的 **Object Read & Write**
+API 令牌，并且只授权 `orvia-beta`。Workflow 通过 R2 的 S3 兼容接口上传对象；
+不要把 R2 对象令牌直接放进 `CLOUDFLARE_API_TOKEN`，因为 Wrangler/Cloudflare
+REST 对象接口不接受这种 bucket-scoped 对象令牌。p12、mobileprovision 和
+p12 密码由测试者在网站提交，不要把它们预先放进 GitHub secrets。
 
 ## 2. 本地验证（不产生线上变更）
 

@@ -21,7 +21,7 @@ ALLOWED_BUCKETS = frozenset({PHASE_ONE_BUCKET, PHASE_TWO_BUCKET})
 IPA_CONTENT_TYPE: str = "application/octet-stream"
 MANIFEST_CONTENT_TYPE: str = "application/xml"
 WINDOWS_COMMAND_METACHARACTERS = frozenset('&|<>^()%!"')
-WRANGLER_ENVIRONMENT_KEYS = (
+R2_ENVIRONMENT_KEYS = (
     "PATH",
     "PATHEXT",
     "SystemRoot",
@@ -32,7 +32,8 @@ WRANGLER_ENVIRONMENT_KEYS = (
     "USERPROFILE",
     "APPDATA",
     "LOCALAPPDATA",
-    "CLOUDFLARE_API_TOKEN",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
 )
 
 
@@ -44,14 +45,16 @@ def _is_windows() -> bool:
     return os.name == "nt"
 
 
-def _wrangler_environment(account_id: str | None = None) -> dict[str, str]:
+def _r2_environment(account_id: str | None = None) -> dict[str, str]:
     environment = {
         key: value
-        for key in WRANGLER_ENVIRONMENT_KEYS
+        for key in R2_ENVIRONMENT_KEYS
         if (value := os.environ.get(key)) is not None
     }
     if account_id is not None:
-        environment["CLOUDFLARE_ACCOUNT_ID"] = account_id
+        environment["AWS_ENDPOINT_URL"] = f"https://{account_id}.r2.cloudflarestorage.com"
+    environment["AWS_DEFAULT_REGION"] = "auto"
+    environment["AWS_EC2_METADATA_DISABLED"] = "true"
     return environment
 
 
@@ -302,6 +305,7 @@ def build_upload_commands(
     plan: PublishPlan,
     ipa_path: Path,
     manifest_path: Path,
+    account_id: str | None = None,
 ) -> list[list[str]]:
     _validate_upload_plan(plan)
     is_windows = _is_windows()
@@ -315,31 +319,36 @@ def build_upload_commands(
             ):
                 raise PublishError("Windows 文件路径包含不安全字符")
 
-    executable = "npx.cmd" if is_windows else "npx"
+    executable = "aws.exe" if is_windows else "aws"
+    endpoint = (
+        f"https://{account_id}.r2.cloudflarestorage.com"
+        if account_id is not None
+        else "https://<account-id>.r2.cloudflarestorage.com"
+    )
     return [
         [
             executable,
-            "--yes",
-            "wrangler@4.125.0",
-            "r2",
-            "object",
-            "put",
-            f"{plan.bucket}/{plan.ipa_key}",
-            "--remote",
-            f"--file={ipa_file}",
-            f"--content-type={plan.ipa_content_type}",
+            "s3",
+            "cp",
+            ipa_file,
+            f"s3://{plan.bucket}/{plan.ipa_key}",
+            "--endpoint-url",
+            endpoint,
+            "--content-type",
+            plan.ipa_content_type,
+            "--no-progress",
         ],
         [
             executable,
-            "--yes",
-            "wrangler@4.125.0",
-            "r2",
-            "object",
-            "put",
-            f"{plan.bucket}/{plan.manifest_key}",
-            "--remote",
-            f"--file={manifest_file}",
-            f"--content-type={plan.manifest_content_type}",
+            "s3",
+            "cp",
+            manifest_file,
+            f"s3://{plan.bucket}/{plan.manifest_key}",
+            "--endpoint-url",
+            endpoint,
+            "--content-type",
+            plan.manifest_content_type,
+            "--no-progress",
         ],
     ]
 
@@ -395,9 +404,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                     raise PublishError("无法写入 OTA manifest") from exc
 
                 if not args.dry_run:
-                    environment = _wrangler_environment(account_id)
+                    environment = _r2_environment(account_id)
                     try:
-                        for command in build_upload_commands(plan, ipa_path, manifest_path):
+                        for command in build_upload_commands(plan, ipa_path, manifest_path, account_id):
                             subprocess.run(
                                 command,
                                 check=True,
@@ -408,7 +417,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                             )
                     except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
                         raise PublishError(
-                            "R2 上传失败，请检查 wrangler@4.125.0 登录、bucket 和权限"
+                            "R2 上传失败，请检查 R2 S3 Access Key、Secret Access Key、endpoint、bucket 和权限"
                         ) from exc
                 output = serialize_result(plan)
         except OSError as exc:
