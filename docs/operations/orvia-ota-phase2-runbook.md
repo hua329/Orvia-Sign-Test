@@ -89,10 +89,13 @@ R2_SECRET_ACCESS_KEY
 ```
 
 其中 `R2_ACCESS_KEY_ID` 和 `R2_SECRET_ACCESS_KEY` 来自 R2 的 **Object Read & Write**
-API 令牌，并且只授权 `orvia-beta`。Workflow 通过 R2 的 S3 兼容接口上传对象；
-不要把 R2 对象令牌直接放进 `CLOUDFLARE_API_TOKEN`，因为 Wrangler/Cloudflare
-REST 对象接口不接受这种 bucket-scoped 对象令牌。p12、mobileprovision 和
-p12 密码由测试者在网站提交，不要把它们预先放进 GitHub secrets。
+API 令牌，并且只授权 `orvia-beta`。注意：Cloudflare 页面显示的原始 API Token
+值不能直接作为 S3 密钥；`R2_SECRET_ACCESS_KEY` 必须填写该 Token 原始值的
+SHA-256 十六进制哈希，`R2_ACCESS_KEY_ID` 填写页面显示的 Access Key ID。
+Workflow 通过 R2 的 S3 兼容接口上传对象；不要把 R2 对象令牌直接放进
+`CLOUDFLARE_API_TOKEN`，因为 Wrangler/Cloudflare REST 对象接口不接受这种
+bucket-scoped 对象令牌。p12、mobileprovision 和 p12 密码由测试者在网站提交，
+不要把它们预先放进 GitHub secrets。
 
 ## 2. 本地验证（不产生线上变更）
 
