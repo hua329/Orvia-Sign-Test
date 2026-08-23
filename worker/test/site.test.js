@@ -55,6 +55,10 @@ function jsonObject(value) {
   };
 }
 
+function validInstallUrl(taskId) {
+  return `itms-services://?action=download-manifest&url=https%3A%2F%2Fbeta.ice329.me%2Fsign%2F${taskId}%2Fmanifest.plist`;
+}
+
 test("serves the Orvia signing page without exposing worker secrets", async () => {
   const response = await worker.fetch(request("/"), baseEnv());
   const html = await response.text();
@@ -67,6 +71,12 @@ test("serves the Orvia signing page without exposing worker secrets", async () =
   assert.doesNotMatch(html, /访问令牌|access-token|X-Orvia-Access-Token/);
   assert.doesNotMatch(html, /GITHUB_TOKEN/);
   assert.doesNotMatch(html, /p12_password/);
+  assert.match(html, /localStorage\.setItem\("orvia-ota:last-task-id", result\.taskId\)/);
+  assert.match(html, /localStorage\.getItem\("orvia-ota:last-task-id"\)/);
+  assert.match(html, /localStorage\.removeItem\("orvia-ota:last-task-id"\)/);
+  assert.match(html, /poll\(savedTaskId\)/);
+  assert.doesNotMatch(html, /localStorage\.setItem\("p12"/);
+  assert.doesNotMatch(html, /localStorage\.setItem\("password"/);
 });
 
 test("blocks new signing when the Orvia switch is explicitly disabled", async () => {
@@ -141,6 +151,35 @@ test("returns only a safe install URL for a completed task", async () => {
     status: "complete",
     installUrl: `itms-services://?action=download-manifest&url=https%3A%2F%2Fbeta.ice329.me%2Fsign%2F${TASK_ID}%2Fmanifest.plist`,
   });
+});
+
+test("treats a validated legacy result without status as complete", async () => {
+  const bucket = new MemoryBucket({
+    [`sign/${TASK_ID}/result.json`]: jsonObject({
+      taskId: TASK_ID,
+      installUrl: validInstallUrl(TASK_ID),
+    }),
+  });
+  const response = await worker.fetch(request(`/api/status/${TASK_ID}`), baseEnv(bucket));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    taskId: TASK_ID,
+    status: "complete",
+    installUrl: validInstallUrl(TASK_ID),
+  });
+});
+
+test("does not treat an explicit non-complete result as complete", async () => {
+  const bucket = new MemoryBucket({
+    [`sign/${TASK_ID}/result.json`]: jsonObject({
+      taskId: TASK_ID,
+      status: "queued",
+      installUrl: validInstallUrl(TASK_ID),
+    }),
+  });
+  const response = await worker.fetch(request(`/api/status/${TASK_ID}`), baseEnv(bucket));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { taskId: TASK_ID, status: "queued" });
 });
 
 test("returns a safe failure message for a failed task", async () => {

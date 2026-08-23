@@ -212,9 +212,10 @@ class PublishOtaTests(unittest.TestCase):
         metadata = IpaMetadata("com.ice.orvia", "42", "1.4.2", "Payload/Orvia.app/Info.plist")
         plan = plan_publish(metadata, "orvia-install", "https://orvia-install.ice329.me", FIXED_TASK_ID)
         result = json.loads(serialize_result(plan))
-        self.assertEqual(set(result), {"taskId", "bundleIdentifier", "bundleVersion", "bundleShortVersion", "ipaKey", "manifestKey", "ipaUrl", "manifestUrl", "installUrl"})
+        self.assertEqual(set(result), {"taskId", "bundleIdentifier", "bundleVersion", "bundleShortVersion", "ipaKey", "manifestKey", "ipaUrl", "manifestUrl", "installUrl", "status"})
         self.assertEqual(result["taskId"], FIXED_TASK_ID)
         self.assertEqual(result["bundleIdentifier"], "com.ice.orvia")
+        self.assertEqual(result["status"], "complete")
 
     def test_cli_dry_run_outputs_json_without_running_wrangler(self):
         fixture = make_ipa(self.tempdir, {

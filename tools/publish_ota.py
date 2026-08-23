@@ -364,6 +364,7 @@ def serialize_result(plan: PublishPlan) -> str:
         "ipaUrl": plan.ipa_url,
         "manifestUrl": plan.manifest_url,
         "installUrl": plan.install_url,
+        "status": "complete",
     }
     return json.dumps(result, ensure_ascii=False)
 

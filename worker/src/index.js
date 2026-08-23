@@ -98,7 +98,10 @@ async function readJsonObject(bucket, key) {
 }
 
 function safeCompleteStatus(taskId, value) {
-  if (!value || value.taskId !== taskId || value.status !== "complete" || !isInstallUrl(value.installUrl, taskId)) {
+  if (!value || value.taskId !== taskId || !isInstallUrl(value.installUrl, taskId)) {
+    return null;
+  }
+  if (value.status !== undefined && value.status !== "complete") {
     return null;
   }
   return { taskId, status: "complete", installUrl: value.installUrl };

@@ -45,9 +45,15 @@ export const SIGNING_PAGE = `<!doctype html>
     const submit = document.getElementById("submit");
     const status = document.getElementById("status");
     const install = document.getElementById("install");
+    const TASK_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const showError = (message) => { status.textContent = message; submit.disabled = false; };
+    const clearSavedTask = () => {
+      try {
+        localStorage.removeItem("orvia-ota:last-task-id");
+      } catch {}
+    };
 
     async function poll(taskId) {
       for (;;) {
@@ -63,7 +69,10 @@ export const SIGNING_PAGE = `<!doctype html>
             submit.disabled = false;
             return;
           }
-          if (result.status === "failed") throw new Error(result.message || "签名失败");
+          if (result.status === "failed") {
+            clearSavedTask();
+            throw new Error(result.message || "签名失败");
+          }
           status.textContent = "正在签名，请稍候…";
         } catch (error) {
           showError(error instanceof Error ? error.message : "签名失败");
@@ -84,13 +93,33 @@ export const SIGNING_PAGE = `<!doctype html>
           body: data,
         });
         const result = await response.json();
-        if (!response.ok || result.status !== "queued") throw new Error(result.error || "无法提交签名任务");
+        if (!response.ok || result.status !== "queued" || !TASK_ID_PATTERN.test(result.taskId)) {
+          throw new Error(result.error || "无法提交签名任务");
+        }
+        try {
+          localStorage.setItem("orvia-ota:last-task-id", result.taskId);
+        } catch {}
         status.textContent = "任务已排队，正在等待签名…";
         await poll(result.taskId);
       } catch (error) {
         showError(error instanceof Error ? error.message : "无法提交签名任务");
       }
     });
+
+    const savedTaskId = (() => {
+      try {
+        return localStorage.getItem("orvia-ota:last-task-id");
+      } catch {
+        return null;
+      }
+    })();
+    if (savedTaskId && TASK_ID_PATTERN.test(savedTaskId)) {
+      submit.disabled = true;
+      status.textContent = "正在恢复任务状态…";
+      poll(savedTaskId);
+    } else if (savedTaskId) {
+      clearSavedTask();
+    }
   </script>
 </body>
 </html>`;
