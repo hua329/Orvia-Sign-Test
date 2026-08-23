@@ -62,7 +62,7 @@ jobs:
             -k cert.p12 \
             -p "$P12_PASSWORD" \
             -m profile.mobileprovision \
-            -b com.ice.orvia \
+            -b com.ice.Orvia \
             -o Orvia-signed.ipa \
             Orvia-unsigned.ipa
 
@@ -118,7 +118,7 @@ jobs:
               raise SystemExit("Invalid task id")
           with open("publish-result.json", encoding="utf-8") as handle:
               result = json.load(handle)
-          if result.get("taskId") != task_id or result.get("bundleIdentifier") != "com.ice.orvia":
+          if result.get("taskId") != task_id or result.get("bundleIdentifier") != "com.ice.Orvia":
               raise SystemExit("Published result does not match the Orvia task contract")
           PY
 
@@ -135,7 +135,7 @@ jobs:
           {
             echo "## Orvia OTA"
             echo "- Task ID: `$TASK_ID`"
-            echo "- Bundle ID: `com.ice.orvia`"
+            echo "- Bundle ID: `com.ice.Orvia`"
             echo "- Install URL: `$INSTALL_URL`"
           } >> "$GITHUB_STEP_SUMMARY"
 
