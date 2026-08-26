@@ -66,6 +66,13 @@ test("serves the Orvia signing page without exposing worker secrets", async () =
   assert.match(response.headers.get("Content-Type"), /^text\/html; charset=utf-8$/);
   assert.equal(response.headers.get("Cache-Control"), "no-store");
   assert.match(html, /Orvia OTA/);
+  assert.match(html, /id="release-panel"/);
+  assert.match(html, /id="release-version"/);
+  assert.match(html, /id="release-date"/);
+  assert.match(html, /id="release-summary"/);
+  assert.match(html, /id="release-changes"/);
+  assert.match(html, /id="release-history"/);
+  assert.match(html, /fetch\("\/api\/release"/);
   assert.match(html, /mobileprovision/);
   assert.match(html, /\/api\/sign/);
   assert.doesNotMatch(html, /访问令牌|access-token|X-Orvia-Access-Token/);
