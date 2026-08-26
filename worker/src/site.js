@@ -1,3 +1,5 @@
+import { ORVIA_ICON_DATA_URI } from "./orvia-icon.js";
+
 const PAGE_HEADERS = {
   "Content-Type": "text/html; charset=utf-8",
   "Cache-Control": "no-store",
@@ -28,15 +30,12 @@ export const SIGNING_PAGE = `<!doctype html>
     main { width: min(720px, 100%); margin: 0 auto; }
     .intro { padding: 4px 4px 8px; }
     .brand-row { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
-    .brand-mark { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 15px; background: linear-gradient(135deg, #4778f4, #2852d5); color: #fff; font-size: 24px; font-weight: 800; box-shadow: 0 10px 22px rgba(53, 99, 233, .24); }
+    .brand-mark { display: block; width: 46px; height: 46px; border-radius: 15px; object-fit: cover; box-shadow: 0 10px 22px rgba(53, 99, 233, .24); }
     .eyebrow { color: #3563e9; font-size: 12px; font-weight: 800; letter-spacing: .14em; }
     .product-label { margin-top: 3px; color: #52617a; font-size: 13px; }
-    .bundle-badge { margin-left: auto; padding: 7px 10px; border: 1px solid #cbd8f5; border-radius: 999px; color: #52617a; background: rgba(255, 255, 255, .72); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
     h1 { margin: 0 0 10px; color: #14213d; font-size: clamp(30px, 6vw, 42px); letter-spacing: -.04em; line-height: 1.12; }
     h2 { margin: 0; color: #14213d; font-size: 20px; letter-spacing: -.02em; }
     .hint { max-width: 620px; margin: 0 0 9px; color: #5f6f88; line-height: 1.7; }
-    .intro-note { margin-top: 16px; color: #52617a; font-size: 13px; }
-    .intro-note strong { color: #3563e9; }
     .card { margin-top: 16px; padding: 22px; border: 1px solid #d9e2f2; border-radius: 22px; background: rgba(255, 255, 255, .94); box-shadow: 0 18px 50px rgba(57, 82, 130, .12); }
     .section-heading { display: flex; align-items: flex-start; gap: 10px; }
     .section-kicker { flex: 0 0 auto; margin-top: 2px; padding: 4px 7px; border-radius: 7px; color: #2455d6; background: #e8efff; font-size: 10px; font-weight: 800; letter-spacing: .08em; }
@@ -59,9 +58,13 @@ export const SIGNING_PAGE = `<!doctype html>
     #release-changes { margin: 12px 0 0; padding-left: 20px; color: #34415a; line-height: 1.7; }
     #release-history { margin-top: 16px; padding-top: 14px; border-top: 1px solid #e5eaf1; }
     #release-history-title { color: #52617a; font-size: 13px; font-weight: 800; }
-    .release-history-item { margin-top: 12px; color: #697890; font-size: 13px; line-height: 1.55; }
+    .release-history-item { margin-top: 14px; color: #697890; font-size: 13px; line-height: 1.55; }
     .release-history-item strong { color: #34415a; }
-    .release-history-item ul { margin: 4px 0 0; padding-left: 20px; }
+    .release-history-preview { display: -webkit-box; margin: 5px 0 0; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+    .release-history-item details { margin-top: 7px; }
+    .release-history-item details summary { color: #285bdc; cursor: pointer; font-weight: 700; }
+    .release-history-full { margin: 7px 0 0; }
+    .release-history-item details ul { margin: 5px 0 0; padding-left: 20px; }
     @media (min-width: 620px) {
       .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .field-grid label:last-child { grid-column: 1 / -1; }
@@ -69,7 +72,6 @@ export const SIGNING_PAGE = `<!doctype html>
     @media (max-width: 480px) {
       body { padding: 20px 12px 36px; }
       .card { padding: 18px; border-radius: 18px; }
-      .bundle-badge { display: none; }
       .section-heading { display: block; }
       .section-kicker { display: inline-block; margin-bottom: 8px; }
     }
@@ -79,17 +81,15 @@ export const SIGNING_PAGE = `<!doctype html>
   <main>
     <header class="intro">
       <div class="brand-row">
-        <div class="brand-mark" aria-hidden="true">O</div>
+        <img class="brand-mark" src="${ORVIA_ICON_DATA_URI}" alt="Orvia 图标">
         <div>
           <div class="eyebrow">ORVIA</div>
           <div class="product-label">记账软件 · OTA 测试安装</div>
         </div>
-        <span class="bundle-badge">com.ice.Orvia</span>
       </div>
       <h1>把 Orvia 安装到你的 iPhone</h1>
       <p class="hint">Orvia 是一款简洁易用的个人记账软件，帮助你随时记录收入与支出，清晰管理日常财务。</p>
       <p class="hint">上传证书后，系统会自动完成签名并生成安装链接。证书只用于当前任务，页面不会保存 p12、描述文件或密码。</p>
-      <p class="intro-note">当前测试 Bundle ID：<strong>com.ice.Orvia</strong> · 签名过程通常需要约 1 分钟</p>
     </header>
     <section class="card" id="sign-card" aria-labelledby="sign-title">
       <div class="section-heading">
@@ -181,12 +181,22 @@ export const SIGNING_PAGE = `<!doctype html>
         const heading = document.createElement("strong");
         heading.textContent = "v" + entry.version + " · " + entry.releasedAt;
         item.appendChild(heading);
-        const summary = document.createElement("div");
-        summary.textContent = entry.summary;
-        item.appendChild(summary);
+        const preview = document.createElement("p");
+        preview.className = "release-history-preview";
+        preview.textContent = entry.summary;
+        item.appendChild(preview);
+        const details = document.createElement("details");
+        const disclosure = document.createElement("summary");
+        disclosure.textContent = "展开完整更新内容";
+        details.appendChild(disclosure);
+        const fullSummary = document.createElement("p");
+        fullSummary.className = "release-history-full";
+        fullSummary.textContent = entry.summary;
+        details.appendChild(fullSummary);
         const changes = document.createElement("ul");
         appendChanges(changes, entry.changes);
-        item.appendChild(changes);
+        details.appendChild(changes);
+        item.appendChild(details);
         releaseHistory.appendChild(item);
       }
       releaseHistory.hidden = false;
