@@ -17,6 +17,16 @@ export const SIGNING_PAGE = `<!doctype html>
     main { width: min(100%, 560px); background: #fff; border: 1px solid #dfe6ef; border-radius: 18px; padding: 28px; box-shadow: 0 16px 50px rgba(25, 48, 80, .09); }
     h1 { margin: 0 0 8px; font-size: 28px; }
     .hint { margin: 0 0 24px; color: #627086; line-height: 1.6; }
+    #release-panel { margin: 0 0 24px; padding: 16px; border: 1px solid #dfe6ef; border-radius: 12px; background: #f8fafc; }
+    #release-panel h2 { margin: 0 0 6px; font-size: 17px; }
+    #release-panel p { margin: 5px 0 0; color: #627086; line-height: 1.5; }
+    #release-version { color: #1f6feb; }
+    #release-changes { margin: 10px 0 0; padding-left: 20px; color: #334155; line-height: 1.6; }
+    #release-history { margin-top: 14px; padding-top: 12px; border-top: 1px solid #e5eaf1; }
+    #release-history-title { color: #627086; font-size: 13px; font-weight: 700; }
+    .release-history-item { margin-top: 10px; }
+    .release-history-item strong { color: #334155; }
+    .release-history-item ul { margin: 4px 0 0; padding-left: 20px; color: #627086; font-size: 13px; }
     form { display: grid; gap: 16px; }
     label { display: grid; gap: 7px; font-weight: 600; }
     input { width: 100%; box-sizing: border-box; padding: 11px 12px; border: 1px solid #cbd5e1; border-radius: 9px; font: inherit; background: #fff; }
@@ -31,6 +41,15 @@ export const SIGNING_PAGE = `<!doctype html>
   <main>
     <h1>Orvia OTA 签名测试</h1>
     <p class="hint">后台开启签名后，上传测试证书和描述文件，系统会自动签名并生成 iPhone 安装链接。证书只用于当前任务。</p>
+    <section id="release-panel" aria-labelledby="release-title">
+      <h2 id="release-title">当前测试版本：<span id="release-version">版本信息暂未发布</span></h2>
+      <p id="release-date"></p>
+      <p id="release-summary">发布信息加载中…</p>
+      <ul id="release-changes"></ul>
+      <div id="release-history" hidden>
+        <div id="release-history-title">最近更新记录</div>
+      </div>
+    </section>
     <form id="sign-form" enctype="multipart/form-data">
       <label>p12 证书<input name="p12" type="file" accept=".p12,application/x-pkcs12" required></label>
       <label>mobileprovision 描述文件<input name="mobileprovision" type="file" accept=".mobileprovision,application/octet-stream" required></label>
@@ -45,10 +64,72 @@ export const SIGNING_PAGE = `<!doctype html>
     const submit = document.getElementById("submit");
     const status = document.getElementById("status");
     const install = document.getElementById("install");
+    const releaseVersion = document.getElementById("release-version");
+    const releaseDate = document.getElementById("release-date");
+    const releaseSummary = document.getElementById("release-summary");
+    const releaseChanges = document.getElementById("release-changes");
+    const releaseHistory = document.getElementById("release-history");
     const TASK_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const showError = (message) => { status.textContent = message; submit.disabled = false; };
+    const clearRelease = () => {
+      releaseVersion.textContent = "版本信息暂未发布";
+      releaseDate.textContent = "";
+      releaseSummary.textContent = "当前还没有发布版本记录。";
+      releaseChanges.replaceChildren();
+      releaseHistory.replaceChildren();
+      releaseHistory.hidden = true;
+    };
+    const appendChanges = (parent, changes) => {
+      for (const change of Array.isArray(changes) ? changes : []) {
+        const item = document.createElement("li");
+        item.textContent = change;
+        parent.appendChild(item);
+      }
+    };
+    const renderRelease = (releaseDocument) => {
+      if (!releaseDocument || releaseDocument.available !== true || !releaseDocument.current) {
+        clearRelease();
+        return;
+      }
+      const current = releaseDocument.current;
+      releaseVersion.textContent = "v" + current.version;
+      releaseDate.textContent = "发布日期：" + current.releasedAt;
+      releaseSummary.textContent = current.summary;
+      releaseChanges.replaceChildren();
+      appendChanges(releaseChanges, current.changes);
+
+      releaseHistory.replaceChildren();
+      const historyTitle = document.createElement("div");
+      historyTitle.id = "release-history-title";
+      historyTitle.textContent = "最近更新记录";
+      releaseHistory.appendChild(historyTitle);
+      for (const entry of Array.isArray(releaseDocument.history) ? releaseDocument.history : []) {
+        const item = document.createElement("div");
+        item.className = "release-history-item";
+        const heading = document.createElement("strong");
+        heading.textContent = "v" + entry.version + " · " + entry.releasedAt;
+        item.appendChild(heading);
+        const summary = document.createElement("div");
+        summary.textContent = entry.summary;
+        item.appendChild(summary);
+        const changes = document.createElement("ul");
+        appendChanges(changes, entry.changes);
+        item.appendChild(changes);
+        releaseHistory.appendChild(item);
+      }
+      releaseHistory.hidden = false;
+    };
+    const loadRelease = async () => {
+      try {
+        const response = await fetch("/api/release", { headers: { Accept: "application/json" } });
+        if (!response.ok) throw new Error("release metadata unavailable");
+        renderRelease(await response.json());
+      } catch {
+        clearRelease();
+      }
+    };
     const clearSavedTask = () => {
       try {
         localStorage.removeItem("orvia-ota:last-task-id");
@@ -120,6 +201,7 @@ export const SIGNING_PAGE = `<!doctype html>
     } else if (savedTaskId) {
       clearSavedTask();
     }
+    loadRelease();
   </script>
 </body>
 </html>`;
