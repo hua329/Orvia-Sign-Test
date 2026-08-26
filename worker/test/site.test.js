@@ -80,7 +80,12 @@ test("serves the Orvia signing page without exposing worker secrets", async () =
   assert.match(html, /name="p12"/);
   assert.match(html, /name="mobileprovision"/);
   assert.match(html, /name="password"/);
-  assert.match(html, /com\.ice\.Orvia/);
+  assert.doesNotMatch(html, /com\.ice\.Orvia/);
+  assert.match(html, /class="brand-mark"/);
+  assert.match(html, /src="data:image\/png;base64,[A-Za-z0-9+/=]+"/);
+  assert.match(html, /document\.createElement\("details"\)/);
+  assert.match(html, /展开完整更新内容/);
+  assert.match(html, /release-history-preview/);
   assert.match(html, /fetch\("\/api\/release"/);
   assert.match(html, /mobileprovision/);
   assert.match(html, /\/api\/sign/);
