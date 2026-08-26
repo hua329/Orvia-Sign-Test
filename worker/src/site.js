@@ -4,7 +4,7 @@ const PAGE_HEADERS = {
   "Content-Type": "text/html; charset=utf-8",
   "Cache-Control": "no-store",
   "X-Content-Type-Options": "nosniff",
-  "Content-Security-Policy": "default-src 'none'; connect-src 'self'; form-action 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'",
+  "Content-Security-Policy": "default-src 'none'; connect-src 'self'; form-action 'self'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:",
 };
 
 export const SIGNING_PAGE = `<!doctype html>

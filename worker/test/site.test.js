@@ -65,6 +65,7 @@ test("serves the Orvia signing page without exposing worker secrets", async () =
   assert.equal(response.status, 200);
   assert.match(response.headers.get("Content-Type"), /^text\/html; charset=utf-8$/);
   assert.equal(response.headers.get("Cache-Control"), "no-store");
+  assert.match(response.headers.get("Content-Security-Policy"), /img-src data:/);
   assert.match(html, /Orvia OTA/);
   assert.match(html, /id="release-panel"/);
   assert.match(html, /id="release-version"/);
