@@ -10,39 +10,117 @@ export const SIGNING_PAGE = `<!doctype html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Orvia OTA 签名测试</title>
+  <title>Orvia OTA · 测试安装</title>
   <style>
-    :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f4f7fb; color: #182230; }
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; box-sizing: border-box; }
-    main { width: min(100%, 560px); background: #fff; border: 1px solid #dfe6ef; border-radius: 18px; padding: 28px; box-shadow: 0 16px 50px rgba(25, 48, 80, .09); }
-    h1 { margin: 0 0 8px; font-size: 28px; }
-    .hint { margin: 0 0 24px; color: #627086; line-height: 1.6; }
-    #release-panel { margin: 0 0 24px; padding: 16px; border: 1px solid #dfe6ef; border-radius: 12px; background: #f8fafc; }
-    #release-panel h2 { margin: 0 0 6px; font-size: 17px; }
-    #release-panel p { margin: 5px 0 0; color: #627086; line-height: 1.5; }
-    #release-version { color: #1f6feb; }
-    #release-changes { margin: 10px 0 0; padding-left: 20px; color: #334155; line-height: 1.6; }
-    #release-history { margin-top: 14px; padding-top: 12px; border-top: 1px solid #e5eaf1; }
-    #release-history-title { color: #627086; font-size: 13px; font-weight: 700; }
-    .release-history-item { margin-top: 10px; }
-    .release-history-item strong { color: #334155; }
-    .release-history-item ul { margin: 4px 0 0; padding-left: 20px; color: #627086; font-size: 13px; }
-    form { display: grid; gap: 16px; }
-    label { display: grid; gap: 7px; font-weight: 600; }
-    input { width: 100%; box-sizing: border-box; padding: 11px 12px; border: 1px solid #cbd5e1; border-radius: 9px; font: inherit; background: #fff; }
-    button { border: 0; border-radius: 9px; padding: 12px 16px; color: #fff; background: #1f6feb; font: inherit; font-weight: 700; cursor: pointer; }
-    button:disabled { cursor: wait; opacity: .65; }
-    #status { min-height: 1.5em; margin-top: 20px; color: #334155; line-height: 1.5; }
-    #install { display: none; margin-top: 12px; color: #126b3a; font-weight: 700; }
-    small { color: #758399; font-weight: 400; }
+    :root {
+      color-scheme: light;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #eef4ff;
+      color: #172033;
+    }
+    * { box-sizing: border-box; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      padding: 28px 16px 48px;
+      background: radial-gradient(circle at top left, #dbe8ff 0, #eef4ff 42%, #f8fbff 100%);
+    }
+    main { width: min(720px, 100%); margin: 0 auto; }
+    .intro { padding: 4px 4px 8px; }
+    .brand-row { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+    .brand-mark { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 15px; background: linear-gradient(135deg, #4778f4, #2852d5); color: #fff; font-size: 24px; font-weight: 800; box-shadow: 0 10px 22px rgba(53, 99, 233, .24); }
+    .eyebrow { color: #3563e9; font-size: 12px; font-weight: 800; letter-spacing: .14em; }
+    .product-label { margin-top: 3px; color: #52617a; font-size: 13px; }
+    .bundle-badge { margin-left: auto; padding: 7px 10px; border: 1px solid #cbd8f5; border-radius: 999px; color: #52617a; background: rgba(255, 255, 255, .72); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+    h1 { margin: 0 0 10px; color: #14213d; font-size: clamp(30px, 6vw, 42px); letter-spacing: -.04em; line-height: 1.12; }
+    h2 { margin: 0; color: #14213d; font-size: 20px; letter-spacing: -.02em; }
+    .hint { max-width: 620px; margin: 0 0 9px; color: #5f6f88; line-height: 1.7; }
+    .intro-note { margin-top: 16px; color: #52617a; font-size: 13px; }
+    .intro-note strong { color: #3563e9; }
+    .card { margin-top: 16px; padding: 22px; border: 1px solid #d9e2f2; border-radius: 22px; background: rgba(255, 255, 255, .94); box-shadow: 0 18px 50px rgba(57, 82, 130, .12); }
+    .section-heading { display: flex; align-items: flex-start; gap: 10px; }
+    .section-kicker { flex: 0 0 auto; margin-top: 2px; padding: 4px 7px; border-radius: 7px; color: #2455d6; background: #e8efff; font-size: 10px; font-weight: 800; letter-spacing: .08em; }
+    .note { margin: 9px 0 0; color: #697890; font-size: 13px; line-height: 1.6; }
+    #sign-form { display: grid; gap: 16px; margin-top: 20px; }
+    .field-grid { display: grid; gap: 14px; }
+    label { display: grid; gap: 8px; color: #34415a; font-size: 14px; font-weight: 700; }
+    input[type="file"], input[type="password"] { width: 100%; padding: 12px; border: 1px solid #cbd6ea; border-radius: 12px; background: #f8fbff; color: #172033; font: inherit; }
+    input[type="file"]::file-selector-button { margin-right: 8px; padding: 7px 9px; border: 0; border-radius: 8px; background: #e4ecff; color: #2852d5; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+    input:focus-visible, button:focus-visible { outline: 3px solid rgba(53, 99, 233, .28); outline-offset: 2px; }
+    button { width: 100%; margin-top: 2px; padding: 13px 18px; border: 0; border-radius: 12px; background: linear-gradient(135deg, #4778f4, #2852d5); color: #fff; font: inherit; font-weight: 800; cursor: pointer; box-shadow: 0 10px 20px rgba(53, 99, 233, .2); }
+    button:disabled { cursor: wait; opacity: .62; box-shadow: none; }
+    #status-card { min-height: 136px; }
+    #status { min-height: 1.5em; margin-top: 14px; color: #34415a; line-height: 1.6; }
+    #install { display: none; margin-top: 12px; color: #167044; font-weight: 800; }
+    #release-panel { margin-top: 16px; }
+    #release-panel h2 { font-size: 19px; }
+    #release-panel p { margin: 7px 0 0; color: #697890; line-height: 1.6; }
+    #release-version { color: #285bdc; }
+    #release-changes { margin: 12px 0 0; padding-left: 20px; color: #34415a; line-height: 1.7; }
+    #release-history { margin-top: 16px; padding-top: 14px; border-top: 1px solid #e5eaf1; }
+    #release-history-title { color: #52617a; font-size: 13px; font-weight: 800; }
+    .release-history-item { margin-top: 12px; color: #697890; font-size: 13px; line-height: 1.55; }
+    .release-history-item strong { color: #34415a; }
+    .release-history-item ul { margin: 4px 0 0; padding-left: 20px; }
+    @media (min-width: 620px) {
+      .field-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .field-grid label:last-child { grid-column: 1 / -1; }
+    }
+    @media (max-width: 480px) {
+      body { padding: 20px 12px 36px; }
+      .card { padding: 18px; border-radius: 18px; }
+      .bundle-badge { display: none; }
+      .section-heading { display: block; }
+      .section-kicker { display: inline-block; margin-bottom: 8px; }
+    }
   </style>
 </head>
 <body>
   <main>
-    <h1>Orvia OTA 签名测试</h1>
-    <p class="hint">后台开启签名后，上传测试证书和描述文件，系统会自动签名并生成 iPhone 安装链接。证书只用于当前任务。</p>
-    <section id="release-panel" aria-labelledby="release-title">
-      <h2 id="release-title">当前测试版本：<span id="release-version">版本信息暂未发布</span></h2>
+    <header class="intro">
+      <div class="brand-row">
+        <div class="brand-mark" aria-hidden="true">O</div>
+        <div>
+          <div class="eyebrow">ORVIA</div>
+          <div class="product-label">记账软件 · OTA 测试安装</div>
+        </div>
+        <span class="bundle-badge">com.ice.Orvia</span>
+      </div>
+      <h1>把 Orvia 安装到你的 iPhone</h1>
+      <p class="hint">Orvia 是一款简洁易用的个人记账软件，帮助你随时记录收入与支出，清晰管理日常财务。</p>
+      <p class="hint">上传证书后，系统会自动完成签名并生成安装链接。证书只用于当前任务，页面不会保存 p12、描述文件或密码。</p>
+      <p class="intro-note">当前测试 Bundle ID：<strong>com.ice.Orvia</strong> · 签名过程通常需要约 1 分钟</p>
+    </header>
+    <section class="card" id="sign-card" aria-labelledby="sign-title">
+      <div class="section-heading">
+        <span class="section-kicker">STEP 1</span>
+        <h2 id="sign-title">上传签名材料</h2>
+      </div>
+      <p class="note">请上传与你的设备和 Bundle ID 匹配的 p12 证书与 mobileprovision 描述文件。</p>
+      <form id="sign-form" enctype="multipart/form-data">
+        <div class="field-grid">
+          <label>p12 证书<input name="p12" type="file" accept=".p12,application/x-pkcs12" required></label>
+          <label>mobileprovision 描述文件<input name="mobileprovision" type="file" accept=".mobileprovision,application/octet-stream" required></label>
+          <label>p12 密码<input name="password" type="password" autocomplete="off" required></label>
+        </div>
+        <button id="submit" type="submit">开始签名</button>
+        <p class="note">签名过程通常需要约 1 分钟，请不要关闭页面。</p>
+      </form>
+    </section>
+    <section class="card" id="status-card" aria-labelledby="status-title">
+      <div class="section-heading">
+        <span class="section-kicker">STEP 2</span>
+        <h2 id="status-title">签名进度与安装</h2>
+      </div>
+      <div id="status" role="status" aria-live="polite"></div>
+      <a id="install" rel="noreferrer">在 iPhone 上安装</a>
+      <p class="note">建议在 iPhone Safari 中打开安装链接；其他浏览器可能无法直接唤起 iOS 安装。</p>
+    </section>
+    <section class="card" id="release-panel" aria-labelledby="release-title">
+      <div class="section-heading">
+        <span class="section-kicker">INFO</span>
+        <h2 id="release-title">当前测试版本：<span id="release-version">版本信息暂未发布</span></h2>
+      </div>
       <p id="release-date"></p>
       <p id="release-summary">发布信息加载中…</p>
       <ul id="release-changes"></ul>
@@ -50,14 +128,6 @@ export const SIGNING_PAGE = `<!doctype html>
         <div id="release-history-title">最近更新记录</div>
       </div>
     </section>
-    <form id="sign-form" enctype="multipart/form-data">
-      <label>p12 证书<input name="p12" type="file" accept=".p12,application/x-pkcs12" required></label>
-      <label>mobileprovision 描述文件<input name="mobileprovision" type="file" accept=".mobileprovision,application/octet-stream" required></label>
-      <label>p12 密码<input name="password" type="password" autocomplete="off" required></label>
-      <button id="submit" type="submit">开始签名</button>
-    </form>
-    <div id="status" role="status" aria-live="polite"></div>
-    <a id="install" rel="noreferrer">在 iPhone 上安装</a>
   </main>
   <script>
     const form = document.getElementById("sign-form");
