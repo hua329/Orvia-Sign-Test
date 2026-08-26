@@ -12,13 +12,13 @@ class WorkflowContractTests(unittest.TestCase):
         cls.workflow = WORKFLOW.read_text(encoding="utf-8")
         cls.runbook = RUNBOOK.read_text(encoding="utf-8")
 
-    def test_accepts_task_id_and_keeps_lowercase_signing_contract(self):
+    def test_accepts_task_id_and_keeps_uppercase_signing_contract(self):
         self.assertIn("task_id:", self.workflow)
         self.assertIn("required: true", self.workflow)
         self.assertIn("Orvia-unsigned.ipa", self.workflow)
-        self.assertIn("-b com.ice.orvia", self.workflow)
+        self.assertIn("-b com.ice.Orvia", self.workflow)
         self.assertIn("-o Orvia-signed.ipa", self.workflow)
-        self.assertNotIn("-b com.ice.Orvia", self.workflow)
+        self.assertNotIn("-b com.ice.orvia", self.workflow)
 
     def test_publishes_only_orvia_task_scoped_objects(self):
         self.assertIn("--bucket", self.workflow)
@@ -57,7 +57,7 @@ class WorkflowContractTests(unittest.TestCase):
             "/api/status/",
             "wzautotool",
             "wz-auto-updates",
-            "com.ice.orvia",
+            "com.ice.Orvia",
         ]:
             self.assertIn(value, self.runbook)
         self.assertNotIn("ORVIA_ACCESS_TOKEN", self.runbook)

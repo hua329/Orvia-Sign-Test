@@ -1,7 +1,7 @@
 # Orvia OTA Phase 2：网站签名与 iPhone 验收手册
 
-本手册只覆盖 Orvia 专用链路。当前测试阶段 Bundle ID 必须保持
-`com.ice.orvia`，不得切换为 `com.ice.Orvia`。
+本手册只覆盖 Orvia 专用链路。当前 Bundle ID 必须保持
+`com.ice.Orvia`，大小写必须完全一致。
 
 ## 固定范围
 
@@ -13,7 +13,7 @@
 | R2 | `orvia-beta` |
 | 公网域名 | `https://beta.ice329.me` |
 | 输入 IPA | `Orvia-unsigned.ipa` |
-| Bundle ID | `com.ice.orvia` |
+| Bundle ID | `com.ice.Orvia` |
 
 禁止读取、修改、重新部署、绑定或删除以下任何非 Orvia 资源：
 
@@ -161,7 +161,7 @@ Pop-Location
 GitHub workflow 会：
 
 - 使用仓库中的 `Orvia-unsigned.ipa`；
-- 保持原有 zsign 命令和 `-b com.ice.orvia`；
+- 保持原有 zsign 命令和 `-b com.ice.Orvia`；
 - 使用 `tools/publish_ota.py` 校验签名包 Bundle ID；
 - 上传 `Orvia.ipa`、`manifest.plist`、`icon.png` 和 `result.json` 到同一任务前缀；
 - 失败时尽量写入安全的 `error.json`；
@@ -186,7 +186,7 @@ curl.exe -I https://beta.ice329.me/sign/<taskId>/icon.png
 | `icon.png` | `image/png` |
 
 下载 manifest 后确认其中的 IPA URL 使用同一 `taskId`、主机为
-`beta.ice329.me`，并且包元数据是 `com.ice.orvia`。只检查该任务前缀，不能
+`beta.ice329.me`，并且包元数据是 `com.ice.Orvia`。只检查该任务前缀，不能
 遍历或清理其他任务。
 
 ## 6. iPhone Safari 验收
@@ -195,10 +195,10 @@ HTTP 检查通过后，在目标 iPhone 的 Safari 打开该任务的 `installUr
 
 1. 确认出现 Orvia 安装提示。
 2. 完成安装并启动 App。
-3. 通过设备或包检查确认 Bundle ID 为 `com.ice.orvia`。
+3. 通过设备或包检查确认 Bundle ID 为 `com.ice.Orvia`。
 4. 记录 task ID、iOS 版本、HTTP 结果和安装结果。
 
-仅 HTTP 200 不等于真机安装成功。不要在本阶段开始 `com.ice.Orvia` 切换。
+仅 HTTP 200 不等于真机安装成功。请确认设备上安装的也是 `com.ice.Orvia`。
 
 ## 7. 任务级清理
 

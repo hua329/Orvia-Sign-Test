@@ -39,21 +39,21 @@ class InspectIpaTests(unittest.TestCase):
 
     def test_inspect_ipa_reads_bundle_and_versions(self):
         ipa = make_ipa(self.tempdir, {
-            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleIdentifier": "com.ice.Orvia",
             "CFBundleVersion": "42",
             "CFBundleShortVersionString": "1.4.2",
         })
         metadata = inspect_ipa(ipa)
-        self.assertEqual(metadata.bundle_identifier, "com.ice.orvia")
+        self.assertEqual(metadata.bundle_identifier, "com.ice.Orvia")
         self.assertEqual(metadata.bundle_version, "42")
         self.assertEqual(metadata.bundle_short_version, "1.4.2")
 
     def test_inspect_ipa_rejects_wrong_bundle_id(self):
         ipa = make_ipa(self.tempdir, {
-            "CFBundleIdentifier": "com.ice.Orvia",
+            "CFBundleIdentifier": "com.ice.orvia",
             "CFBundleVersion": "42",
         })
-        with self.assertRaisesRegex(PublishError, "com.ice.orvia"):
+        with self.assertRaisesRegex(PublishError, "com.ice.Orvia"):
             inspect_ipa(ipa)
 
     def test_inspect_ipa_rejects_missing_info_plist(self):
@@ -63,7 +63,7 @@ class InspectIpaTests(unittest.TestCase):
 
     def test_inspect_ipa_rejects_corrupted_compressed_info_plist(self):
         ipa = make_ipa(self.tempdir, {
-            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleIdentifier": "com.ice.Orvia",
             "CFBundleVersion": "42",
         })
         with zipfile.ZipFile(ipa) as archive:
@@ -81,7 +81,7 @@ class InspectIpaTests(unittest.TestCase):
 
     def test_inspect_ipa_translates_unexpected_zip_errors(self):
         ipa = make_ipa(self.tempdir, {
-            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleIdentifier": "com.ice.Orvia",
             "CFBundleVersion": "42",
         })
         archive = MagicMock()
@@ -120,19 +120,19 @@ class PublishOtaTests(unittest.TestCase):
     def test_build_manifest_contains_ota_metadata(self):
         from tools.publish_ota import build_manifest
 
-        metadata = IpaMetadata("com.ice.orvia", "42", "1.4.2", "Payload/Orvia.app/Info.plist")
+        metadata = IpaMetadata("com.ice.Orvia", "42", "1.4.2", "Payload/Orvia.app/Info.plist")
         manifest = plistlib.loads(build_manifest(metadata, "https://orvia-install.ice329.me/sign/t/Orvia.ipa"))
         item = manifest["items"][0]
         self.assertEqual(item["assets"][0]["kind"], "software-package")
         self.assertEqual(item["assets"][0]["url"], "https://orvia-install.ice329.me/sign/t/Orvia.ipa")
-        self.assertEqual(item["metadata"]["bundle-identifier"], "com.ice.orvia")
+        self.assertEqual(item["metadata"]["bundle-identifier"], "com.ice.Orvia")
         self.assertEqual(item["metadata"]["bundle-version"], "42")
         self.assertEqual(item["metadata"]["title"], "Orvia")
 
     def test_build_manifest_escapes_xml_url_values(self):
         from tools.publish_ota import build_manifest
 
-        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        metadata = IpaMetadata("com.ice.Orvia", "42", None, "Payload/Orvia.app/Info.plist")
         xml = build_manifest(metadata, "https://orvia-install.ice329.me/sign/t/Orvia.ipa?x=1&y=2")
         self.assertIn(b"&amp;", xml)
         self.assertEqual(
@@ -143,14 +143,14 @@ class PublishOtaTests(unittest.TestCase):
     def test_build_manifest_translates_control_character_serialization_error(self):
         from tools.publish_ota import build_manifest
 
-        metadata = IpaMetadata("com.ice.orvia", "1\x00", None, "Payload/Orvia.app/Info.plist")
+        metadata = IpaMetadata("com.ice.Orvia", "1\x00", None, "Payload/Orvia.app/Info.plist")
         with self.assertRaisesRegex(PublishError, "manifest"):
             build_manifest(metadata, "https://orvia-install.ice329.me/sign/t/Orvia.ipa")
 
     def test_upload_commands_set_content_types_and_task_keys(self):
         from tools.publish_ota import build_upload_commands, plan_publish
 
-        metadata = IpaMetadata("com.ice.orvia", "42", "1.4.2", "Payload/Orvia.app/Info.plist")
+        metadata = IpaMetadata("com.ice.Orvia", "42", "1.4.2", "Payload/Orvia.app/Info.plist")
         plan = plan_publish(metadata, "orvia-install", "https://orvia-install.ice329.me", FIXED_TASK_ID)
         commands = build_upload_commands(plan, Path("signed.ipa"), Path("manifest.plist"))
         self.assertEqual(len(commands), 2)
@@ -176,7 +176,7 @@ class PublishOtaTests(unittest.TestCase):
     def test_upload_commands_use_module_local_platform_helper(self):
         from tools.publish_ota import build_upload_commands, plan_publish
 
-        metadata = IpaMetadata("com.ice.orvia", "42", "1.4.2", "Payload/Orvia.app/Info.plist")
+        metadata = IpaMetadata("com.ice.Orvia", "42", "1.4.2", "Payload/Orvia.app/Info.plist")
         plan = plan_publish(metadata, "orvia-install", "https://orvia-install.ice329.me", FIXED_TASK_ID)
         with patch("tools.publish_ota._is_windows", return_value=False):
             commands = build_upload_commands(plan, Path("signed.ipa"), Path("manifest.plist"))
@@ -186,14 +186,14 @@ class PublishOtaTests(unittest.TestCase):
     def test_upload_commands_reject_malformed_plan_before_command_construction(self):
         from tools.publish_ota import build_upload_commands, plan_publish
 
-        metadata = IpaMetadata("com.ice.orvia", "42", "1.4.2", "Payload/Orvia.app/Info.plist")
+        metadata = IpaMetadata("com.ice.Orvia", "42", "1.4.2", "Payload/Orvia.app/Info.plist")
         plan = plan_publish(metadata, "orvia-install", "https://orvia-install.ice329.me", FIXED_TASK_ID)
         malformed_plans = (
             replace(plan, bucket="legacy-production"),
             replace(plan, ipa_key="Orvia.ipa"),
             replace(plan, manifest_key="manifest.plist"),
             replace(plan, task_id="{" + FIXED_TASK_ID + "}"),
-            replace(plan, bundle_identifier="com.ice.Orvia"),
+            replace(plan, bundle_identifier="com.ice.orvia"),
             replace(plan, ipa_content_type="text/plain"),
             replace(plan, manifest_content_type="text/plain"),
         )
@@ -209,17 +209,17 @@ class PublishOtaTests(unittest.TestCase):
     def test_serialize_result_has_exact_output_contract(self):
         from tools.publish_ota import plan_publish, serialize_result
 
-        metadata = IpaMetadata("com.ice.orvia", "42", "1.4.2", "Payload/Orvia.app/Info.plist")
+        metadata = IpaMetadata("com.ice.Orvia", "42", "1.4.2", "Payload/Orvia.app/Info.plist")
         plan = plan_publish(metadata, "orvia-install", "https://orvia-install.ice329.me", FIXED_TASK_ID)
         result = json.loads(serialize_result(plan))
         self.assertEqual(set(result), {"taskId", "bundleIdentifier", "bundleVersion", "bundleShortVersion", "ipaKey", "manifestKey", "ipaUrl", "manifestUrl", "installUrl", "status"})
         self.assertEqual(result["taskId"], FIXED_TASK_ID)
-        self.assertEqual(result["bundleIdentifier"], "com.ice.orvia")
+        self.assertEqual(result["bundleIdentifier"], "com.ice.Orvia")
         self.assertEqual(result["status"], "complete")
 
     def test_cli_dry_run_outputs_json_without_running_wrangler(self):
         fixture = make_ipa(self.tempdir, {
-            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleIdentifier": "com.ice.Orvia",
             "CFBundleVersion": "42",
             "CFBundleShortVersionString": "1.4.2",
         })
@@ -232,14 +232,14 @@ class PublishOtaTests(unittest.TestCase):
             "--dry-run",
         ], check=True, capture_output=True, text=True)
         output = json.loads(completed.stdout)
-        self.assertEqual(output["bundleIdentifier"], "com.ice.orvia")
+        self.assertEqual(output["bundleIdentifier"], "com.ice.Orvia")
         self.assertTrue(output["installUrl"].startswith("itms-services://"))
 
     def test_cli_manifest_write_failure_returns_publish_error_without_upload(self):
         from tools.publish_ota import main
 
         fixture = make_ipa(self.tempdir, {
-            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleIdentifier": "com.ice.Orvia",
             "CFBundleVersion": "42",
             "CFBundleShortVersionString": "1.4.2",
         })
@@ -266,7 +266,7 @@ class PublishOtaTests(unittest.TestCase):
         from tools.publish_ota import main
 
         fixture = make_ipa(self.tempdir, {
-            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleIdentifier": "com.ice.Orvia",
             "CFBundleVersion": "42",
             "CFBundleShortVersionString": "1.4.2",
         })
@@ -297,7 +297,7 @@ class PublishOtaTests(unittest.TestCase):
         from tools.publish_ota import main
 
         fixture = make_ipa(self.tempdir, {
-            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleIdentifier": "com.ice.Orvia",
             "CFBundleVersion": "42",
             "CFBundleShortVersionString": "1.4.2",
         })
@@ -331,7 +331,7 @@ class PublishOtaTests(unittest.TestCase):
         from tools.publish_ota import main
 
         fixture = make_ipa(self.tempdir, {
-            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleIdentifier": "com.ice.Orvia",
             "CFBundleVersion": "42",
             "CFBundleShortVersionString": "1.4.2",
         })
@@ -370,7 +370,7 @@ class PublishOtaTests(unittest.TestCase):
         from tools.publish_ota import main
 
         fixture = make_ipa(self.tempdir, {
-            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleIdentifier": "com.ice.Orvia",
             "CFBundleVersion": "42",
         })
         stdout = io.StringIO()
@@ -414,7 +414,7 @@ class PublishOtaTests(unittest.TestCase):
         from tools.publish_ota import main
 
         fixture = make_ipa(self.tempdir, {
-            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleIdentifier": "com.ice.Orvia",
             "CFBundleVersion": "42",
         })
         stdout = io.StringIO()
@@ -436,7 +436,7 @@ class PublishOtaTests(unittest.TestCase):
         from tools.publish_ota import main
 
         fixture = make_ipa(self.tempdir, {
-            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleIdentifier": "com.ice.Orvia",
             "CFBundleVersion": "42",
         })
         for account_id in ("g" * 32, "0" * 31, "0" * 33, "not-an-account-id"):
@@ -461,7 +461,7 @@ class PublishOtaTests(unittest.TestCase):
         from tools.publish_ota import main
 
         fixture = make_ipa(self.tempdir, {
-            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleIdentifier": "com.ice.Orvia",
             "CFBundleVersion": "42",
             "CFBundleShortVersionString": "1.4.2",
         })
@@ -510,7 +510,7 @@ class PublishOtaTests(unittest.TestCase):
         from tools.publish_ota import main
 
         fixture = make_ipa(self.tempdir, {
-            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleIdentifier": "com.ice.Orvia",
             "CFBundleVersion": "42",
             "CFBundleShortVersionString": "1.4.2",
         })
@@ -538,7 +538,7 @@ class PublishOtaTests(unittest.TestCase):
     def test_plan_publish_isolates_task_and_builds_install_url(self):
         from tools.publish_ota import plan_publish, PublishPlan
 
-        metadata = IpaMetadata("com.ice.orvia", "42", "1.4.2", "Payload/Orvia.app/Info.plist")
+        metadata = IpaMetadata("com.ice.Orvia", "42", "1.4.2", "Payload/Orvia.app/Info.plist")
         plan = plan_publish(metadata, "orvia-install", "https://orvia-install.ice329.me", "00000000-0000-4000-8000-000000000001")
         self.assertEqual(plan.ipa_key, "sign/00000000-0000-4000-8000-000000000001/Orvia.ipa")
         self.assertIn("manifest.plist", plan.manifest_url)
@@ -548,7 +548,7 @@ class PublishOtaTests(unittest.TestCase):
     def test_plan_publish_rejects_unapproved_buckets(self):
         from tools.publish_ota import plan_publish
 
-        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        metadata = IpaMetadata("com.ice.Orvia", "42", None, "Payload/Orvia.app/Info.plist")
         for bucket in (
             "legacy-production",
             "orvia-install ",
@@ -566,7 +566,7 @@ class PublishOtaTests(unittest.TestCase):
     def test_plan_publish_accepts_phase_two_bucket(self):
         from tools.publish_ota import plan_publish
 
-        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        metadata = IpaMetadata("com.ice.Orvia", "42", None, "Payload/Orvia.app/Info.plist")
         plan = plan_publish(metadata, "orvia-beta", "https://beta.ice329.me", FIXED_TASK_ID)
         self.assertEqual(plan.bucket, "orvia-beta")
         self.assertEqual(plan.ipa_url, f"https://beta.ice329.me/{plan.ipa_key}")
@@ -574,7 +574,7 @@ class PublishOtaTests(unittest.TestCase):
     def test_plan_publish_rejects_invalid_task_ids(self):
         from tools.publish_ota import plan_publish
 
-        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        metadata = IpaMetadata("com.ice.Orvia", "42", None, "Payload/Orvia.app/Info.plist")
         for task_id in ("not-a-uuid", 42):
             with self.subTest(task_id=task_id):
                 with self.assertRaisesRegex(PublishError, "UUID"):
@@ -583,7 +583,7 @@ class PublishOtaTests(unittest.TestCase):
     def test_plan_publish_normalizes_supplied_uuid(self):
         from tools.publish_ota import plan_publish
 
-        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        metadata = IpaMetadata("com.ice.Orvia", "42", None, "Payload/Orvia.app/Info.plist")
         plan = plan_publish(
             metadata,
             "orvia-install",
@@ -595,7 +595,7 @@ class PublishOtaTests(unittest.TestCase):
     def test_plan_publish_translates_quote_unicode_and_value_errors(self):
         from tools.publish_ota import plan_publish
 
-        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        metadata = IpaMetadata("com.ice.Orvia", "42", None, "Payload/Orvia.app/Info.plist")
         for failure in (UnicodeError("bad unicode"), ValueError("bad URL")):
             with self.subTest(failure=type(failure).__name__):
                 with patch("tools.publish_ota.quote", side_effect=failure):
@@ -610,7 +610,7 @@ class PublishOtaTests(unittest.TestCase):
     def test_plan_publish_rejects_existing_ice329_download_domains(self):
         from tools.publish_ota import plan_publish, PublishPlan
 
-        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        metadata = IpaMetadata("com.ice.Orvia", "42", None, "Payload/Orvia.app/Info.plist")
         for base_url in (
             "http://orvia-install.ice329.me",
             "https://downloads.ice329.me",
@@ -624,7 +624,7 @@ class PublishOtaTests(unittest.TestCase):
     def test_plan_publish_rejects_idna_equivalent_protected_hosts(self):
         from tools.publish_ota import plan_publish
 
-        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        metadata = IpaMetadata("com.ice.Orvia", "42", None, "Payload/Orvia.app/Info.plist")
         for base_url in (
             "https://ice329\u3002me",
             "https://ice329\uff0eme",
@@ -639,7 +639,7 @@ class PublishOtaTests(unittest.TestCase):
     def test_plan_publish_rejects_percent_encoded_protected_hosts(self):
         from tools.publish_ota import plan_publish
 
-        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        metadata = IpaMetadata("com.ice.Orvia", "42", None, "Payload/Orvia.app/Info.plist")
         for base_url in (
             "https://ice329%2eme",
             "https://downloads%2eice329.me",
@@ -651,7 +651,7 @@ class PublishOtaTests(unittest.TestCase):
     def test_plan_publish_rejects_unencodable_hostname(self):
         from tools.publish_ota import plan_publish
 
-        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        metadata = IpaMetadata("com.ice.Orvia", "42", None, "Payload/Orvia.app/Info.plist")
         try:
             plan_publish(metadata, "orvia-install", "https://\ud800.example.com", FIXED_TASK_ID)
         except Exception as exc:
@@ -662,14 +662,14 @@ class PublishOtaTests(unittest.TestCase):
     def test_plan_publish_rejects_base_url_userinfo(self):
         from tools.publish_ota import plan_publish
 
-        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        metadata = IpaMetadata("com.ice.Orvia", "42", None, "Payload/Orvia.app/Info.plist")
         with self.assertRaises(PublishError):
             plan_publish(metadata, "orvia-install", "https://user:password@example.com")
 
     def test_plan_publish_rejects_unsafe_base_url_characters(self):
         from tools.publish_ota import plan_publish
 
-        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        metadata = IpaMetadata("com.ice.Orvia", "42", None, "Payload/Orvia.app/Info.plist")
         for base_url in (
             "https://example.com/path with space",
             "https://example.com/path\nwith-control",
@@ -682,7 +682,7 @@ class PublishOtaTests(unittest.TestCase):
     def test_windows_file_metacharacters_raise_publish_error_before_command_construction(self):
         from tools.publish_ota import build_upload_commands, plan_publish
 
-        metadata = IpaMetadata("com.ice.orvia", "42", None, "Payload/Orvia.app/Info.plist")
+        metadata = IpaMetadata("com.ice.Orvia", "42", None, "Payload/Orvia.app/Info.plist")
         plan = plan_publish(metadata, "orvia-install", "https://orvia-install.ice329.me", FIXED_TASK_ID)
         unsafe_ipa_path = Path(self.tempdir.name) / "signed&whoami^%!.ipa"
         with patch("tools.publish_ota._is_windows", return_value=True):
@@ -693,7 +693,7 @@ class PublishOtaTests(unittest.TestCase):
         from tools.publish_ota import main
 
         fixture = make_ipa(self.tempdir, {
-            "CFBundleIdentifier": "com.ice.orvia",
+            "CFBundleIdentifier": "com.ice.Orvia",
             "CFBundleVersion": "42",
             "CFBundleShortVersionString": "1.4.2",
         }, filename="signed&whoami^%!.ipa")
