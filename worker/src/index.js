@@ -5,6 +5,7 @@ import {
   taskResultKey,
   tokenMatches,
 } from "./signing.js";
+import { publicReleaseResponse, releaseAdminResponse } from "./release.js";
 import { signingPageResponse } from "./site.js";
 
 const TASK_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -242,8 +243,17 @@ const worker = {
       return signResponse(request, env);
     }
 
+    if (url.pathname === "/api/release") {
+      if (request.method !== "GET") return methodNotAllowed("GET");
+      return publicReleaseResponse(env);
+    }
+
     if (url.pathname === "/internal/admin/signing") {
       return signingAdminResponse(request, env);
+    }
+
+    if (url.pathname === "/internal/admin/release") {
+      return releaseAdminResponse(request, env);
     }
 
     const statusMatch = STATUS_PATH.exec(url.pathname);
