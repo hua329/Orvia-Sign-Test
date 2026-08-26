@@ -72,6 +72,15 @@ test("serves the Orvia signing page without exposing worker secrets", async () =
   assert.match(html, /id="release-summary"/);
   assert.match(html, /id="release-changes"/);
   assert.match(html, /id="release-history"/);
+  assert.ok(html.indexOf('id="sign-form"') < html.indexOf('id="release-panel"'));
+  assert.match(html, /上传签名材料/);
+  assert.match(html, /Orvia 是一款简洁易用的个人记账软件/);
+  assert.match(html, /签名过程通常需要约 1 分钟/);
+  assert.match(html, /建议在 iPhone Safari 中打开安装链接/);
+  assert.match(html, /name="p12"/);
+  assert.match(html, /name="mobileprovision"/);
+  assert.match(html, /name="password"/);
+  assert.match(html, /com\.ice\.Orvia/);
   assert.match(html, /fetch\("\/api\/release"/);
   assert.match(html, /mobileprovision/);
   assert.match(html, /\/api\/sign/);
